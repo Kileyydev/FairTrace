@@ -72,3 +72,19 @@ class LoginSerializer(serializers.Serializer):
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField()
+
+# users/serializers.py
+from rest_framework import serializers
+from .models import Product, ProductStage
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = "__all__"
+        read_only_fields = ("farmer", "status", "pid", "qr_code", "created_at", "updated_at")
+
+class ProductStageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductStage
+        fields = "__all__"
+        read_only_fields = ("product", "scanned_qr", "updated_at")

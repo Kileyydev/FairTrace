@@ -1,8 +1,13 @@
+# users/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
 from django.conf import settings
 import hashlib
+import uuid
+import qrcode
+from io import BytesIO
+from django.core.files import File
 
 
 class UserManager(BaseUserManager):
@@ -62,3 +67,34 @@ class OTPToken(models.Model):
             self.save()
             return True
         return False
+
+
+# Product models
+class Product(models.Model):
+    farmer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="products")
+    name = models.CharField(max_length=100)
+    product_type = models.CharField(max_length=100)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    image = models.ImageField(upload_to='products/')
+    status = models.CharField(max_length=50, default="pending_verification")
+    pid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def generate_qr(self):
+        qr_img = qrcode.make(str(self.pid))
+        buffer = BytesIO()
+        qr_img.save(buffer, format="PNG")
+        filename = f"{self.pid}.png"
+        self.qr_code.save(filename, File(buffer))
+        self.save()
+
+
+class ProductStage(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stages")
+    stage_name = models.CharField(max_length=100)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    location = models.CharField(max_length=100, blank=True, null=True)
+    scanned_qr = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)

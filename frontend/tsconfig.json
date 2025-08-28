@@ -24,4 +24,6 @@
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/register/FarmerMap.tsx"],
   "exclude": ["node_modules"]
+  
 }
+

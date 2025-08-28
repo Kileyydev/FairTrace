@@ -6,12 +6,12 @@ import { Facebook, Twitter, LinkedIn, Instagram } from "@mui/icons-material";
 
 export default function Footer() {
   return (
-    <Box sx={{ bgcolor: "#1a3c34", color: "#d4e4d9", py: 4 }}>
+    <Box sx={{ bgcolor: "#1a3c34", color: "#d4e4d9", py: 1.2 }}>
       <Container maxWidth="lg">
         {/* Branding/Logo Placeholder */}
         <Box sx={{ textAlign: "center", mb: 3 }}>
           <Typography
-            variant="h16"
+            variant="h30"
             fontWeight="600"
             sx={{ color: "#d4e4d9", letterSpacing: "0.02em" }}
           >

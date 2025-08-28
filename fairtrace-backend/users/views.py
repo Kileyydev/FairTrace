@@ -142,3 +142,57 @@ class VerifyOtp(APIView):
         otp_obj.delete()
 
         return Response({"message": "OTP verified", "user": user.email}, status=status.HTTP_200_OK)
+
+# users/views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from .models import Product, ProductStage
+from .serializers import ProductSerializer, ProductStageSerializer
+from django.shortcuts import get_object_or_404
+
+class ProductRegisterAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            product = serializer.save(farmer=request.user)
+            return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ProductListAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        products = Product.objects.filter(farmer=request.user)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data)
+
+class ProductStageListAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pid):
+        product = get_object_or_404(Product, pid=pid, farmer=request.user)
+        stages = product.stages.all()
+        serializer = ProductStageSerializer(stages, many=True)
+        return Response(serializer.data)
+
+class UpdateProductStageAPIView(APIView):
+    # For admin/Sacco use
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pid):
+        product = get_object_or_404(Product, pid=pid)
+        stage_name = request.data.get("stage_name")
+        quantity = request.data.get("quantity")
+        location = request.data.get("location", "")
+
+        stage = ProductStage.objects.create(
+            product=product,
+            stage_name=stage_name,
+            quantity=quantity,
+            location=location,
+            scanned_qr=True
+        )
+        return Response({"detail": "Stage updated"}, status=status.HTTP_201_CREATED)
