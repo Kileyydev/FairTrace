@@ -424,7 +424,7 @@ export default function RegisterPage() {
                 variant="contained"
                 size="large"
                 sx={{
-                  background: "#2f855a",
+                  background: "#bcd0c6ff",
                   color: "#ffffff",
                   
                   "&:hover": { background: "#276749", boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)" },

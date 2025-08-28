@@ -21,9 +21,7 @@ const settings = {
 };
 
 const images: string[] = [
-  "/images/tear53.webp",
-  "/images/trace2.jpg",
-  "/images/trace3.jpg",
+  "/images/tear5.webp",
 ];
 
 export default function HeroSection() {
