@@ -30,10 +30,23 @@ export default function AboutSection() {
     <Box
       sx={{
         py: 10,
-        background: "#1a3c34",
-        color: "#1a3c34",
+       
+     background: "linear-gradient(135deg, #1a3c34 0%, #2f855a 100%)",
       }}
     >
+      <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "200%",
+                opacity: 0.1,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4e4d9' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M0 0h40v40H0z'/%3E%3Cpath d='M20 20l10 10-10 10-10-10z'/%3E%3C/g%3E%3C/svg%3E")`,
+                backgroundRepeat: "repeat",
+              }}
+            />
+      
       <Container maxWidth="lg">
         <Box
           sx={{
@@ -47,7 +60,7 @@ export default function AboutSection() {
             <Card
               key={index}
               sx={{
-                background: "#ffffff",
+                 background: "#e6f0e9",
                 border: "1px solid #c4d8c9",
                 textAlign: "center",
                 transition: "transform 0.3s ease, box-shadow 0.3s ease",
