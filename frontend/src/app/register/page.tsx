@@ -169,13 +169,29 @@ export default function RegisterPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (validate()) {
-      console.log("Form submitted:", formData);
-      alert("Registration successful! Data will be stored on blockchain and replicated to PostgreSQL.");
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!validate()) return;
+
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    });
+
+    if (res.ok) {
+      alert("Registration successful!");
+    } else {
+      const errorData = await res.json();
+      alert("Error: " + JSON.stringify(errorData));
     }
-  };
+  } catch (err) {
+    console.error(err);
+    alert("Network error - check backend");
+  }
+};
+
 
   useEffect(() => {
     setTimeout(() => setMapLoading(false), 1000);
@@ -434,7 +450,7 @@ export default function RegisterPage() {
               </Button>
             </Box>
             <FormHelperText sx={{ textAlign: "center", color: "#4a6b5e", pb: 2 }}>
-              Upon registration, your data will be securely stored on the blockchain and replicated to our PostgreSQL database.
+              Upon registration, your data will be securely stored 
             </FormHelperText>
           </Box>
         </Box>

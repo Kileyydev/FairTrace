@@ -44,24 +44,56 @@ export default function LoginPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (validateStep()) {
-      if (step === 0) {
-        // Placeholder for API call to verify email/password and send OTP
-        // e.g., await api.login({ email: formData.email, password: formData.password });
-        console.log("Sending OTP to:", formData.email);
+const handleNext = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!validateStep()) return;
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/users/login";
+
+  try {
+    if (step === 0) {
+      // Step 0: send OTP
+      const res = await fetch(`${API_BASE}/users/login/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert("OTP sent! Check your email.");
         setOtpSent(true);
         setStep(1);
       } else {
-        // Placeholder for API call to verify OTP and login
-        // e.g., await api.verifyOtp({ email: formData.email, otp: formData.otp });
-        console.log("OTP verified:", formData.otp);
-        alert("Login successful! Redirecting based on role...");
-        // Redirect based on role (e.g., SACCO employee or customer)
+        alert(data.detail || "Invalid credentials");
+      }
+    } else if (step === 1) {
+      // Step 1: verify OTP
+      const res = await fetch(`${API_BASE}/users/verify-otp/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email, otp: formData.otp }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert("Login successful!");
+        console.log("Access token:", data.access);
+        console.log("Refresh token:", data.refresh);
+        // Here you can store JWT tokens in localStorage/sessionStorage or context
+        // Then redirect user based on role
+      } else {
+        alert(data.detail || "Invalid or expired OTP");
       }
     }
-  };
+  } catch (err) {
+    console.error("Login error:", err);
+    alert("Error communicating with server. Try again later.");
+  }
+};
+
 
   const handleResendOtp = () => {
     // Placeholder for resending OTP
