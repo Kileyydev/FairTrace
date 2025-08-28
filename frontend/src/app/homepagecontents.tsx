@@ -1,6 +1,6 @@
 'use client';
 
-import TopNavigation from './components/TopNavigation';
+import TopNavigation from './components/TopNavBar';
 export default function HomePageContents() {
   return (
     <>
