@@ -30,7 +30,6 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'farmers',
-    'blockchain',
 ]
 
 # Middleware

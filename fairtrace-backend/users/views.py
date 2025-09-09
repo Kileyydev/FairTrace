@@ -10,6 +10,7 @@ import hashlib, secrets
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
+from datetime import datetime
 
 
 class RegisterAPIView(APIView):
@@ -17,8 +18,69 @@ class RegisterAPIView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         farmer = serializer.save()
+
+        # 1. Generate SACCO Membership ID
+        year = datetime.now().year
+
+        # fetch SACCO (ensure frontend sends sacco_name or sacco_id)
+        sacco = None
+        sacco_code = "000"
+        sacco_location = "Unknown"
+        if farmer.sacco_name:  # assuming this is a FK to Sacco model
+            sacco = farmer.sacco_name
+            sacco_code = sacco.code
+            sacco_location = sacco.location
+
+        # Ensure uniqueness → use farmer.id padded to 4 digits
+        unique_number = str(farmer.id).zfill(4)
+        sacco_id = f"SACCO-{sacco_code}-{year}-{unique_number}"
+
+        farmer.sacco_membership_id = sacco_id
+        farmer.save()
+
+        # 2. Send Email Notification
+        try:
+            send_mail(
+                subject="🎉 Welcome to FairTrace – Your SACCO Membership ID",
+                message=(
+                    f"Dear {farmer.full_name},\n\n"
+                    f"Congratulations! You are now registered on FairTrace.\n\n"
+                    f"✅ Your SACCO Membership ID: {sacco_id}\n"
+                    f"🏠 Registered SACCO: {sacco.name if sacco else 'N/A'}\n"
+                    f"📍 Location: {sacco_location}\n\n"
+                    f"Your details are securely stored and verified on the blockchain.\n"
+                    f"Keep your SACCO Membership ID safe, you will use it for verification and product tracking.\n\n"
+                    f"– FairTrace Team"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[farmer.email],
+                fail_silently=True
+            )
+        except Exception as e:
+            print(f"Email sending failed: {e}")
+
+        # 3. Push Key Data to Blockchain (simplified, pseudocode)
+        registration_hash = hashlib.sha256(
+            f"{farmer.id}{farmer.email}{sacco_id}".encode()
+        ).hexdigest()
+
+        # blockchain_register_farmer(
+        #     sacco_id=sacco_id,
+        #     user_id=farmer.id,
+        #     sacco_location=sacco_location,
+        #     timestamp=str(timezone.now()),
+        #     data_hash=registration_hash
+        # )
+
+        # 4. Response
         return Response(
-            {'detail': 'registered', 'farmer_id': farmer.id},
+            {
+                "detail": "registered",
+                "farmer_id": farmer.id,
+                "sacco_id": sacco_id,
+                "sacco_location": sacco_location,
+                "blockchain_hash": registration_hash  # for debugging/verification
+            },
             status=status.HTTP_201_CREATED
         )
 

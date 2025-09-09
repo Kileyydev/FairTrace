@@ -36,6 +36,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_sacco_admin = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
+    sacco_membership_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    sacco_name = models.ForeignKey("Sacco", on_delete=models.SET_NULL, null=True, blank=True)
 
     objects = UserManager()
 
@@ -98,3 +100,12 @@ class ProductStage(models.Model):
     location = models.CharField(max_length=100, blank=True, null=True)
     scanned_qr = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
+
+class Sacco(models.Model):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20, unique=True)
+    location = models.CharField(max_length=100)
+    contact_info = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
