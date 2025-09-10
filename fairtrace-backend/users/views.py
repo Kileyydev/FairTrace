@@ -1,17 +1,21 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
 from django.contrib.auth import authenticate
-from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer
-from .models import OTPToken, User
 from django.utils import timezone
-from datetime import timedelta
-import hashlib, secrets
+from datetime import datetime, timedelta
 from django.core.mail import send_mail
 from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
-from datetime import datetime
+import hashlib, secrets
+from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer
+from .models import OTPToken, User
+from farmers.models import Farmer
 
+# ----------------------------
+# Registration
+# ----------------------------
+# Import your blockchain task
+from blockchain.tasks import register_farmer_onchain  # make sure this exists and returns tx hash
 
 class RegisterAPIView(APIView):
     def post(self, request):
@@ -19,38 +23,42 @@ class RegisterAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         farmer = serializer.save()
 
-        # 1. Generate SACCO Membership ID
+        # Auto-generate SACCO membership ID
         year = datetime.now().year
-
-        # fetch SACCO (ensure frontend sends sacco_name or sacco_id)
-        sacco = None
-        sacco_code = "000"
-        sacco_location = "Unknown"
-        if farmer.sacco_name:  # assuming this is a FK to Sacco model
-            sacco = farmer.sacco_name
-            sacco_code = sacco.code
-            sacco_location = sacco.location
-
-        # Ensure uniqueness → use farmer.id padded to 4 digits
-        unique_number = str(farmer.id).zfill(4)
-        sacco_id = f"SACCO-{sacco_code}-{year}-{unique_number}"
-
-        farmer.sacco_membership_id = sacco_id
+        unique_number = str(farmer.id).zfill(4)  # ensure 4-digit unique ID
+        sacco_id = f"FT-{year}-{unique_number}"
+        farmer.sacco_membership = sacco_id
         farmer.save()
 
-        # 2. Send Email Notification
+        # Compute simple blockchain hash
+        registration_hash = hashlib.sha256(
+            f"{farmer.id}{farmer.email}{sacco_id}".encode()
+        ).hexdigest()
+
+        # --- BLOCKCHAIN REGISTRATION ---
+        try:
+            # This function should interact with Hardhat and return tx hash
+            tx_hash = register_farmer_onchain(
+                name=farmer.full_name,
+                idHash=str(farmer.national_id),
+                location=farmer.farm_address
+            )
+        except Exception as e:
+            print(f"Blockchain registration failed: {e}")
+            tx_hash = None
+
+        # Send Farmer ID via email
         try:
             send_mail(
-                subject="🎉 Welcome to FairTrace – Your SACCO Membership ID",
+                subject="🎉 Welcome to FairTrace – Your Farmer ID",
                 message=(
                     f"Dear {farmer.full_name},\n\n"
-                    f"Congratulations! You are now registered on FairTrace.\n\n"
-                    f"✅ Your SACCO Membership ID: {sacco_id}\n"
-                    f"🏠 Registered SACCO: {sacco.name if sacco else 'N/A'}\n"
-                    f"📍 Location: {sacco_location}\n\n"
+                    f"Congratulations! You are successfully registered.\n\n"
+                    f"✅ Your Farmer ID: {farmer.uid}\n"
+                    f"✅ SACCO Membership ID: {sacco_id}\n"
+                    f"✅ Blockchain TX: {tx_hash or 'Pending'}\n\n"
                     f"Your details are securely stored and verified on the blockchain.\n"
-                    f"Keep your SACCO Membership ID safe, you will use it for verification and product tracking.\n\n"
-                    f"– FairTrace Team"
+                    f"Keep your IDs safe.\n\n– FairTrace Team"
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[farmer.email],
@@ -59,34 +67,21 @@ class RegisterAPIView(APIView):
         except Exception as e:
             print(f"Email sending failed: {e}")
 
-        # 3. Push Key Data to Blockchain (simplified, pseudocode)
-        registration_hash = hashlib.sha256(
-            f"{farmer.id}{farmer.email}{sacco_id}".encode()
-        ).hexdigest()
-
-        # blockchain_register_farmer(
-        #     sacco_id=sacco_id,
-        #     user_id=farmer.id,
-        #     sacco_location=sacco_location,
-        #     timestamp=str(timezone.now()),
-        #     data_hash=registration_hash
-        # )
-
-        # 4. Response
         return Response(
             {
                 "detail": "registered",
-                "farmer_id": farmer.id,
+                "farmer_id": str(farmer.uid),
                 "sacco_id": sacco_id,
-                "sacco_location": sacco_location,
-                "blockchain_hash": registration_hash  # for debugging/verification
+                "blockchain_hash": registration_hash,
+                "tx_hash": tx_hash
             },
             status=status.HTTP_201_CREATED
         )
 
-
+# ----------------------------
+# Login (Send OTP)
+# ----------------------------
 class LoginAPIView(APIView):
-    # Step 1: Verify password -> send OTP
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -95,30 +90,31 @@ class LoginAPIView(APIView):
         password = serializer.validated_data['password']
 
         user = authenticate(request, email=email, password=password)
-        if user is None:
-            return Response(
-                {'detail': 'invalid credentials'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+        if not user:
+            return Response({'detail': 'invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Generate OTP
+        # Generate 6-digit OTP
         otp_plain = f"{secrets.randbelow(10**6):06d}"
         otp_hash = hashlib.sha256(otp_plain.encode()).hexdigest()
         expires_at = timezone.now() + timedelta(minutes=10)
 
         OTPToken.objects.create(user=user, otp_hash=otp_hash, expires_at=expires_at)
 
-        # Send via email (consider SMS or external email service in production)
+        # Send OTP via email
         send_mail(
             subject='Your FairTrace OTP',
             message=f'Your FairTrace login code is: {otp_plain}',
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email]
+            recipient_list=[user.email],
+            fail_silently=True
         )
 
-        return Response({'detail': 'otp_sent'})
+        return Response({'detail': 'otp_sent'}, status=status.HTTP_200_OK)
 
 
+# ----------------------------
+# Verify OTP
+# ----------------------------
 class VerifyOTPAPIView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
@@ -130,87 +126,30 @@ class VerifyOTPAPIView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response(
-                {'detail': 'user not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'detail': 'user not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Find valid OTP
+        # Check for valid OTP
         qs = user.otps.filter(used=False).order_by('-created_at')
         for token in qs:
             if token.verify(otp):
-                # OTP valid — issue JWT token
+                # OTP valid, issue JWT
+                from rest_framework_simplejwt.tokens import RefreshToken
                 refresh = RefreshToken.for_user(user)
+                token.used = True
+                token.save()
                 return Response({
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
                 })
 
-        return Response(
-            {'detail': 'invalid or expired otp'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({'detail': 'invalid or expired otp'}, status=status.HTTP_400_BAD_REQUEST)
 
-# users/views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth import authenticate
-from .models import OTPToken
-import random
-from django.core.mail import send_mail
 
-class LoginSendOtp(APIView):
-    def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-
-        user = authenticate(request, email=email, password=password)
-        if not user:
-            return Response({"error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Generate 6-digit OTP
-        otp_code = str(random.randint(100000, 999999))
-        OTPToken.objects.create(user=user, code=otp_code)
-
-        # Send email (configure your email backend in settings.py)
-        send_mail(
-            "Your FairTrace OTP",
-            f"Your OTP is {otp_code}. It expires in 5 minutes.",
-            "no-reply@fairtrace.com",
-            [email],
-        )
-        return Response({"message": "OTP sent to your email"}, status=status.HTTP_200_OK)
-
-class VerifyOtp(APIView):
-    def post(self, request):
-        email = request.data.get('email')
-        otp_code = request.data.get('otp')
-
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            otp_obj = OTPToken.objects.filter(user=user, code=otp_code).latest('created_at')
-        except OTPToken.DoesNotExist:
-            return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not otp_obj.is_valid():
-            return Response({"error": "OTP expired"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # OTP is valid; delete it so it can't be reused
-        otp_obj.delete()
-
-        return Response({"message": "OTP verified", "user": user.email}, status=status.HTTP_200_OK)
-
-# users/views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, permissions
-from .models import Product, ProductStage
+# ----------------------------
+# Product APIs
+# ----------------------------
 from .serializers import ProductSerializer, ProductStageSerializer
+from .models import Product, ProductStage
 from django.shortcuts import get_object_or_404
 
 class ProductRegisterAPIView(APIView):
@@ -223,6 +162,7 @@ class ProductRegisterAPIView(APIView):
             return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ProductListAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -230,6 +170,7 @@ class ProductListAPIView(APIView):
         products = Product.objects.filter(farmer=request.user)
         serializer = ProductSerializer(products, many=True)
         return Response(serializer.data)
+
 
 class ProductStageListAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -240,8 +181,8 @@ class ProductStageListAPIView(APIView):
         serializer = ProductStageSerializer(stages, many=True)
         return Response(serializer.data)
 
+
 class UpdateProductStageAPIView(APIView):
-    # For admin/Sacco use
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pid):
