@@ -1,6 +1,10 @@
 from django.db import models
 from django.conf import settings
 import uuid
+import qrcode
+from io import BytesIO
+from django.core.files import File
+
 
 class Farmer(models.Model):
     STATUS_CHOICES = [
@@ -24,8 +28,8 @@ class Farmer(models.Model):
     main_crops = models.TextField(blank=True)
     sacco_membership = models.CharField(max_length=100)
     sacco_name = models.CharField(max_length=200, blank=True)
-    record_hash = models.CharField(max_length=66, blank=True)
-    tx_hash = models.CharField(max_length=100, blank=True)
+    record_hash = models.CharField(max_length=66, blank=True)  # blockchain storage hash
+    tx_hash = models.CharField(max_length=100, blank=True)      # Ethereum tx hash
     onchain_status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -35,21 +39,38 @@ class Farmer(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-# users/models.py
-from django.db import models
-from django.contrib.auth import get_user_model
-from django.utils import timezone
-import uuid
 
-User = get_user_model()
-
-class OTP(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    code = models.CharField(max_length=6)
+class Product(models.Model):
+    farmer = models.ForeignKey(Farmer, on_delete=models.CASCADE, related_name="products")
+    name = models.CharField(max_length=100)
+    product_type = models.CharField(max_length=100)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    image = models.ImageField(upload_to='products/')
+    status = models.CharField(max_length=50, default="pending_verification")
+    pid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    def is_valid(self):
-        return timezone.now() < self.created_at + timezone.timedelta(minutes=5)
+    def generate_qr(self):
+        qr_img = qrcode.make(str(self.pid))
+        buffer = BytesIO()
+        qr_img.save(buffer, format="PNG")
+        filename = f"{self.pid}.png"
+        self.qr_code.save(filename, File(buffer))
+        self.save()
 
     def __str__(self):
-        return f"{self.user.email} - {self.code}"
+        return f"{self.name} ({self.farmer.user.email})"
+
+
+class ProductStage(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stages")
+    stage_name = models.CharField(max_length=100)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    location = models.CharField(max_length=100, blank=True, null=True)
+    scanned_qr = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.stage_name} for {self.product.name}"

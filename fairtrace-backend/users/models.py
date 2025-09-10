@@ -1,13 +1,7 @@
-# users/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
-from django.conf import settings
 import hashlib
-import uuid
-import qrcode
-from io import BytesIO
-from django.core.files import File
 
 
 class UserManager(BaseUserManager):
@@ -36,8 +30,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_sacco_admin = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
-    sacco_membership_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    sacco_name = models.ForeignKey("Sacco", on_delete=models.SET_NULL, null=True, blank=True)
 
     objects = UserManager()
 
@@ -48,58 +40,17 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.email
 
 
-class OTPToken(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='otps'
-    )
-    otp_hash = models.CharField(max_length=64)
+class OTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
+    code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    used = models.BooleanField(default=False)
 
     def is_valid(self):
-        return (not self.used) and (timezone.now() < self.expires_at)
+        return timezone.now() < self.created_at + timezone.timedelta(minutes=5)
 
-    def verify(self, otp_plain: str) -> bool:
-        hashed = hashlib.sha256(otp_plain.encode()).hexdigest()
-        if hashed == self.otp_hash and self.is_valid():
-            self.used = True
-            self.save()
-            return True
-        return False
+    def __str__(self):
+        return f"{self.user.email} - {self.code}"
 
-
-# Product models
-class Product(models.Model):
-    farmer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="products")
-    name = models.CharField(max_length=100)
-    product_type = models.CharField(max_length=100)
-    quantity = models.DecimalField(max_digits=10, decimal_places=2)
-    image = models.ImageField(upload_to='products/')
-    status = models.CharField(max_length=50, default="pending_verification")
-    pid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def generate_qr(self):
-        qr_img = qrcode.make(str(self.pid))
-        buffer = BytesIO()
-        qr_img.save(buffer, format="PNG")
-        filename = f"{self.pid}.png"
-        self.qr_code.save(filename, File(buffer))
-        self.save()
-
-
-class ProductStage(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stages")
-    stage_name = models.CharField(max_length=100)
-    quantity = models.DecimalField(max_digits=10, decimal_places=2)
-    location = models.CharField(max_length=100, blank=True, null=True)
-    scanned_qr = models.BooleanField(default=False)
-    updated_at = models.DateTimeField(auto_now=True)
 
 class Sacco(models.Model):
     name = models.CharField(max_length=100)
