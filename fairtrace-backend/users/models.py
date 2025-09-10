@@ -14,6 +14,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
+
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
@@ -41,7 +42,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class OTP(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
+    user = models.ForeignKey( User, on_delete=models.CASCADE, related_name="otps")
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -51,6 +52,14 @@ class OTP(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.code}"
 
+class OTPToken(models.Model):
+    user = models.ForeignKey( User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user.username} - {self.code}"
 
 class Sacco(models.Model):
     name = models.CharField(max_length=100)
@@ -60,3 +69,24 @@ class Sacco(models.Model):
 
     def __str__(self):
         return self.name
+    
+    from django.db import models
+from django.conf import settings
+
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+class ProductStage(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stages")
+    stage_name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.product.name} - {self.stage_name}"

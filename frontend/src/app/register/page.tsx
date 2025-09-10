@@ -8,6 +8,9 @@ import "leaflet/dist/leaflet.css";
 import { useMapEvents, MapContainerProps } from "react-leaflet";
 import TopNavBar from "../components/TopNavBar";
 import Footer from "../components/FooterSection";
+import { ethers } from "ethers";
+import { Web3Provider } from "@ethersproject/providers";
+import { Contract, type ContractRunner } from "ethers";
 
 // Custom Leaflet icon
 const customIcon = new L.Icon({
@@ -169,29 +172,68 @@ export default function RegisterPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   if (!validate()) return;
 
   try {
+    // --- 1. Send to PostgreSQL backend ---
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
 
-    if (res.ok) {
-      alert("Registration successful!");
-    } else {
+    if (!res.ok) {
       const errorData = await res.json();
-      alert("Error: " + JSON.stringify(errorData));
+      alert("Backend Error: " + JSON.stringify(errorData));
+      return;
     }
-  } catch (err) {
+
+    const savedUser = await res.json(); // You can get backend-generated ID here
+
+    // --- 2. Send to Blockchain ---
+    // Make sure MetaMask is installed
+    if (!window.ethereum) {
+      alert("MetaMask is required for blockchain registration!");
+      return;
+    }
+
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider(window.ethereum); // Ethers v6
+await provider.send("eth_requestAccounts", []);
+const signer = await provider.getSigner();
+
+  
+
+    // Contract info
+    const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Your deployed contract
+    const contractABI = [
+      "function registerFarmer(string memory _name, string memory _idHash, string memory _location) public returns (uint256)",
+      "function getFarmer(uint256 _id) public view returns (string memory, string memory, string memory)"
+    ];
+
+    const contract = new Contract(contractAddress, contractABI, signer as unknown as ContractRunner);
+
+
+    // Register on blockchain
+    const tx = await contract.registerFarmer(
+      formData.fullName,
+      formData.nationalId,
+      formData.farmAddress
+    );
+
+    const receipt = await tx.wait(); // Wait for confirmation
+
+    // Optional: Get farmer ID (could be event-based)
+    const farmerId = receipt.blockNumber; // For demo, we use blockNumber or you can read event logs
+
+    alert(`Registration successful!\nFarmer ID: ${farmerId}`);
+  } catch (err: any) {
     console.error(err);
-    alert("Network error - check backend");
+    alert("Error: " + (err.message || "Unknown error"));
   }
 };
-
 
   useEffect(() => {
     setTimeout(() => setMapLoading(false), 1000);
@@ -401,13 +443,8 @@ export default function RegisterPage() {
                   helperText={errors.saccoMembership}
                   sx={{ gridColumn: "span 2" }}
                 />
-                <TextField
-                  label="SACCO Name"
-                  name="saccoName"
-                  value={formData.saccoName}
-                  onChange={handleChange}
-                  sx={{ gridColumn: "span 2" }}
-                />
+              
+                
               </Box>
             </TabPanel>
             <TabPanel value={tabValue} index={3}>

@@ -4,6 +4,8 @@ Django settings for fairtrace_backend project.
 
 from pathlib import Path
 from decouple import config
+import os
+
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,6 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-wlr*_cka80@lpy_rs+6ch1dzs^+#owk^72whk%3hgpz818*7z3')
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # Installed apps
 INSTALLED_APPS = [
@@ -31,6 +34,14 @@ INSTALLED_APPS = [
     'users',
     'farmers',
 ]
+
+# Web3 / contract settings
+SEPOLIA_RPC_URL = os.environ.get('SEPOLIA_RPC_URL')
+WEB3_PRIVATE_KEY = os.environ.get('WEB3_PRIVATE_KEY')  # relayer account (0x...)
+CONTRACT_ADDRESS = os.environ.get('CONTRACT_ADDRESS')
+CONTRACT_ABI_JSON = os.environ.get('CONTRACT_ABI_JSON')  # optional if not loading artifact file
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
+CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 
 # Middleware
 MIDDLEWARE = [
@@ -104,6 +115,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model
 AUTH_USER_MODEL = 'users.User'
+
 
 # Email configuration
 # settings.py
