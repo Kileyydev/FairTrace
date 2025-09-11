@@ -6,17 +6,24 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.core.mail import send_mail
 from django.conf import settings
+from rest_framework.permissions import AllowAny
 import hashlib, secrets
-from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer
-from .models import OTPToken, User
+
+from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer, ProductSerializer, ProductStageSerializer
+from .models import OTPToken, User, Product, ProductStage
 from farmers.models import Farmer
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.shortcuts import get_object_or_404
+
+# ----------------------------
+# Blockchain Task Import
+# ----------------------------
+from blockchain.tasks import register_farmer_onchain
+
 
 # ----------------------------
 # Registration
 # ----------------------------
-# Import your blockchain task
-from blockchain.tasks import register_farmer_onchain  # make sure this exists and returns tx hash
-
 class RegisterAPIView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -25,19 +32,18 @@ class RegisterAPIView(APIView):
 
         # Auto-generate SACCO membership ID
         year = datetime.now().year
-        unique_number = str(farmer.id).zfill(4)  # ensure 4-digit unique ID
+        unique_number = str(farmer.id).zfill(4)
         sacco_id = f"FT-{year}-{unique_number}"
         farmer.sacco_membership = sacco_id
         farmer.save()
 
-        # Compute simple blockchain hash
+        # Compute blockchain hash
         registration_hash = hashlib.sha256(
             f"{farmer.id}{farmer.email}{sacco_id}".encode()
         ).hexdigest()
 
-        # --- BLOCKCHAIN REGISTRATION ---
+        # Blockchain registration
         try:
-            # This function should interact with Hardhat and return tx hash
             tx_hash = register_farmer_onchain(
                 name=farmer.full_name,
                 idHash=str(farmer.national_id),
@@ -47,7 +53,7 @@ class RegisterAPIView(APIView):
             print(f"Blockchain registration failed: {e}")
             tx_hash = None
 
-        # Send Farmer ID via email
+        # Send confirmation email
         try:
             send_mail(
                 subject="🎉 Welcome to FairTrace – Your Farmer ID",
@@ -57,7 +63,6 @@ class RegisterAPIView(APIView):
                     f"✅ Your Farmer ID: {farmer.uid}\n"
                     f"✅ SACCO Membership ID: {sacco_id}\n"
                     f"✅ Blockchain TX: {tx_hash or 'Pending'}\n\n"
-                    f"Your details are securely stored and verified on the blockchain.\n"
                     f"Keep your IDs safe.\n\n– FairTrace Team"
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
@@ -78,8 +83,9 @@ class RegisterAPIView(APIView):
             status=status.HTTP_201_CREATED
         )
 
+
 # ----------------------------
-# Login (Send OTP)
+# Login (Send OTP after password check)
 # ----------------------------
 class LoginAPIView(APIView):
     def post(self, request):
@@ -91,19 +97,19 @@ class LoginAPIView(APIView):
 
         user = authenticate(request, email=email, password=password)
         if not user:
-            return Response({'detail': 'invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Generate 6-digit OTP
         otp_plain = f"{secrets.randbelow(10**6):06d}"
         otp_hash = hashlib.sha256(otp_plain.encode()).hexdigest()
-        expires_at = timezone.now() + timedelta(minutes=10)
+        expires_at = timezone.now() + timedelta(minutes=10)  # OTP valid for 10 min
 
         OTPToken.objects.create(user=user, otp_hash=otp_hash, expires_at=expires_at)
 
         # Send OTP via email
         send_mail(
             subject='Your FairTrace OTP',
-            message=f'Your FairTrace login code is: {otp_plain}',
+            message=f'Your FairTrace login code is: {otp_plain}\n\nValid for 10 minutes.',
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             fail_silently=True
@@ -113,45 +119,76 @@ class LoginAPIView(APIView):
 
 
 # ----------------------------
-# Verify OTP
+# Verify OTP (issue JWT)
 # ----------------------------
 class VerifyOTPAPIView(APIView):
-    def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    permission_classes = [AllowAny]  # endpoint should be callable without auth (your login already checked creds)
 
-        email = serializer.validated_data['email']
-        otp = serializer.validated_data['otp']
-
+    def post(self, request, *args, **kwargs):
+        # Debug: show exactly what arrived (dev only)
+        print("===== VERIFY OTP: incoming request.data =====")
         try:
-            user = User.objects.get(email=email)
+            print(request.data)
+        except Exception as e:
+            print("Could not print request.data:", e)
+
+        # Validate payload
+        serializer = VerifyOTPSerializer(data=request.data)
+        if not serializer.is_valid():
+            print("===== VERIFY OTP: serializer.errors =====")
+            print(serializer.errors)
+            return Response(
+                {"detail": "invalid input", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        data = serializer.validated_data
+        otp = data["otp"]
+        email = data.get("email")
+        user_id = data.get("user_id")
+
+        # Resolve user by id or email
+        try:
+            if user_id:
+                user = User.objects.get(id=user_id)
+            else:
+                user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'detail': 'user not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "user not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Check for valid OTP
-        qs = user.otps.filter(used=False).order_by('-created_at')
-        for token in qs:
-            if token.verify(otp):
-                # OTP valid, issue JWT
-                from rest_framework_simplejwt.tokens import RefreshToken
+        # Query non-expired tokens for that user
+        now = timezone.now()
+        tokens_qs = OTPToken.objects.filter(user=user, expires_at__gte=now).order_by("-created_at")
+
+        # Debug: show how many candidate tokens we checked
+        print(f"Found {tokens_qs.count()} non-expired tokens for user {user.email}")
+
+        # Compare hashed OTP to stored otp_hash
+        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        for token in tokens_qs:
+            print(f"Checking token id={token.id} created_at={token.created_at}")
+            if token.otp_hash == otp_hash:
+                # SUCCESS: consume the token (delete it) and issue JWT
+                try:
+                    token.delete()
+                except Exception as e:
+                    print(f"Warning: failed to delete OTP token id={token.id}: {e}")
+
                 refresh = RefreshToken.for_user(user)
-                token.used = True
-                token.save()
                 return Response({
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                })
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                }, status=status.HTTP_200_OK)
 
-        return Response({'detail': 'invalid or expired otp'}, status=status.HTTP_400_BAD_REQUEST)
-
+        # If we reach here, no tokens matched
+        return Response(
+            {"detail": "Invalid or expired OTP", "checked": tokens_qs.count()},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 # ----------------------------
 # Product APIs
 # ----------------------------
-from .serializers import ProductSerializer, ProductStageSerializer
-from .models import Product, ProductStage
-from django.shortcuts import get_object_or_404
-
 class ProductRegisterAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -186,12 +223,12 @@ class UpdateProductStageAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pid):
-        product = get_object_or_404(Product, pid=pid)
+        product = get_object_or_404(Product, pid=pid, farmer=request.user)
         stage_name = request.data.get("stage_name")
         quantity = request.data.get("quantity")
         location = request.data.get("location", "")
 
-        stage = ProductStage.objects.create(
+        ProductStage.objects.create(
             product=product,
             stage_name=stage_name,
             quantity=quantity,

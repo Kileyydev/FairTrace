@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.conf import settings
 
 class Farmer(models.Model):
     STATUS_CHOICES = [
@@ -7,6 +8,12 @@ class Farmer(models.Model):
         ('confirmed', 'Confirmed'),
         ('failed', 'Failed'),
     ]
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='farmer_profile',
+        null=True, blank=True
+    )
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     full_name = models.CharField(max_length=200)

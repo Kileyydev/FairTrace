@@ -1,7 +1,18 @@
+// LoginPage.tsx
 "use client";
 
 import React, { useState } from "react";
-import { Box, Container, Typography, TextField, Button, Stepper, Step, StepLabel, FormHelperText } from "@mui/material";
+import {
+  Box,
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Stepper,
+  Step,
+  StepLabel,
+  FormHelperText,
+} from "@mui/material";
 import TopNavBar from "../components/TopNavBar";
 import Footer from "../components/FooterSection";
 import { useRouter } from "next/navigation";
@@ -38,6 +49,9 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const router = useRouter();
 
+  const API_BASE =
+    process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -58,68 +72,91 @@ export default function LoginPage() {
     e.preventDefault();
     if (!validateStep()) return;
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/users/login";
-
     try {
       if (step === 0) {
+        // Step 1: verify email & password
         const res = await fetch(`${API_BASE}/users/login/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email: formData.email,
+            email: formData.email.trim(),
             password: formData.password,
           }),
         });
 
         const data = await res.json();
+        console.log("Login response:", data);
 
         if (res.ok) {
           setOtpSent(true);
           setStep(1);
         } else {
-          setErrors({ ...errors, password: data.detail || "Invalid credentials" });
+          setErrors({
+            ...errors,
+            password: data.detail || "Invalid credentials",
+          });
         }
       } else if (step === 1) {
+        // Step 2: verify OTP
+        const requestBody = {
+          email: formData.email.trim(),
+          otp: formData.otp.trim(),
+        };
+
+        console.log("Sending OTP verification request:", requestBody);
+
         const res = await fetch(`${API_BASE}/users/verify-otp/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: formData.email,
-            otp: formData.otp,
-          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         });
 
         const data = await res.json();
+        console.log("OTP verification response:", data);
 
         if (res.ok) {
           localStorage.setItem("access", data.access);
           localStorage.setItem("refresh", data.refresh);
 
           const decoded: JwtPayload = jwtDecode(data.access);
-          router.push(decoded.is_sacco_admin ? "/admin-dashboard" : "/dashboard");
+          router.push(
+            decoded.is_sacco_admin ? "/admin-dashboard" : "/dashboard"
+          );
         } else {
-          setErrors({ ...errors, otp: data.detail || "Invalid or expired OTP" });
+          setErrors({
+            ...errors,
+            otp:
+              data.detail ||
+              data.error ||
+              "Invalid or expired OTP. Please try again.",
+          });
         }
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setErrors({ ...errors, [step === 0 ? "password" : "otp"]: "Error communicating with server" });
+      console.error("Error in handleNext:", err);
+      setErrors({
+        ...errors,
+        [step === 0 ? "password" : "otp"]:
+          "Error communicating with server",
+      });
     }
   };
 
   const handleResendOtp = async () => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/users";
     try {
       const res = await fetch(`${API_BASE}/users/login/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.email,
+          email: formData.email.trim(),
           password: formData.password,
         }),
       });
 
       const data = await res.json();
+      console.log("Resend OTP response:", data);
 
       if (res.ok) {
         alert("OTP resent!");
@@ -186,7 +223,9 @@ export default function LoginPage() {
             <Stepper activeStep={step} alternativeLabel sx={{ mb: 4 }}>
               {steps.map((label) => (
                 <Step key={label}>
-                  <StepLabel sx={{ "& .MuiStepLabel-label": { color: "#1a3c34" } }}>
+                  <StepLabel
+                    sx={{ "& .MuiStepLabel-label": { color: "#1a3c34" } }}
+                  >
                     {label}
                   </StepLabel>
                 </Step>
@@ -258,7 +297,9 @@ export default function LoginPage() {
               >
                 {step === 0 ? "Continue" : "Login"}
               </Button>
-              <FormHelperText sx={{ textAlign: "center", color: "#4a6b5e", mt: 2 }}>
+              <FormHelperText
+                sx={{ textAlign: "center", color: "#4a6b5e", mt: 2 }}
+              >
                 Secure login with multi-factor authentication.
               </FormHelperText>
             </Box>

@@ -45,6 +45,7 @@ class OTP(models.Model):
     user = models.ForeignKey( User, on_delete=models.CASCADE, related_name="otps")
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
+    used = models.BooleanField(default=False)  # <<< ADD THIS FIELD
 
     def is_valid(self):
         return timezone.now() < self.created_at + timezone.timedelta(minutes=5)
@@ -53,13 +54,14 @@ class OTP(models.Model):
         return f"{self.user.email} - {self.code}"
 
 class OTPToken(models.Model):
-    user = models.ForeignKey( User, on_delete=models.CASCADE)
-    code = models.CharField(max_length=6)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp_hash = models.CharField(max_length=64, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.username} - {self.code}"
+        return f"{self.user.email} - {self.otp_hash}"
 
 class Sacco(models.Model):
     name = models.CharField(max_length=100)

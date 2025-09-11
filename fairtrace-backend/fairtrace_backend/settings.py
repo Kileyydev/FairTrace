@@ -43,6 +43,10 @@ CONTRACT_ABI_JSON = os.environ.get('CONTRACT_ABI_JSON')  # optional if not loadi
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
 CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 
+# settings.py
+USE_TZ = True
+TIME_ZONE = 'Africa/Nairobi'
+
 # Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -115,7 +119,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model
 AUTH_USER_MODEL = 'users.User'
-
 
 # Email configuration
 # settings.py
