@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'farmers',
+    'products',
 ]
 
 # Web3 / contract settings
