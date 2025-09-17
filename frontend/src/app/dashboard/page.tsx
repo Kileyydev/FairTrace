@@ -28,8 +28,8 @@ import {
   Card,
   CardContent,
   CardMedia,
-  Grid,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -121,7 +121,7 @@ export default function Dashboard() {
       try {
         const decoded: JwtPayload = jwtDecode(token);
         setFarmerName(decoded.first_name || decoded.email || "Farmer");
-        fetchProducts(token);
+        fetchProducts();
         fetchPayments(token);
         fetchFeedbacks(token);
       } catch (err) {
@@ -131,20 +131,71 @@ export default function Dashboard() {
     }
   }, [router]);
 
-  const fetchProducts = async (token: string) => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/my-products/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch products");
-      const data = await res.json();
-      setProducts(data || []);
-      setError(null);
-    } catch (err) {
-      console.error("Error fetching products:", err);
-      setError("Failed to load products. Please try again.");
+const fetchProducts = async () => {
+  setError(null);
+  const token = await getValidAccessToken();
+
+  if (!token) {
+    setError("Session expired. Please log in again.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Backend error fetching products:", data);
+      setError(data.detail || "Failed to fetch products");
+      return;
     }
-  };
+
+    const formattedProducts = data.map((p: any) => ({
+      id: p.uid,
+      name: p.title,
+      product_type: p.variety,
+      quantity: p.quantity,
+      acres: p.acres,
+      status: p.status,
+      pid: p.pid,
+      qr_code: p.qr_code_data,
+      harvested: false,
+      stages: [],
+      feedbacks: [],
+    }));
+
+    setProducts(formattedProducts);
+  } catch (err) {
+    console.error("Error fetching products:", err);
+    setError("Failed to load products. Please try again.");
+  }
+};
+
+const getValidAccessToken = async (): Promise<string | null> => {
+  let token = localStorage.getItem("access");
+  const refresh = localStorage.getItem("refresh");
+
+  if (!token && refresh) {
+    try {
+      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+      const refreshData = await refreshRes.json();
+      if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
+      token = refreshData.access;
+      localStorage.setItem("access", token ?? "");
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+      return null;
+    }
+  }
+
+  return token;
+};
 
   const fetchPayments = async (token: string) => {
     try {
@@ -174,41 +225,147 @@ export default function Dashboard() {
     }
   };
 
+  const refreshAccessToken = async (): Promise<string | null> => {
+  const refresh = localStorage.getItem("refresh");
+  if (!refresh) return null;
+
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+
+    if (!res.ok) throw new Error("Failed to refresh token");
+
+    const data = await res.json();
+    localStorage.setItem("access", data.access);
+    return data.access;
+  } catch (err) {
+    console.error("Token refresh error:", err);
+    return null;
+  }
+};
+
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name as string]: value }));
+  const { name, value } = e.target;
+  setFormData((prev) => ({
+    ...prev,
+    [name as string]: typeof value === "string" ? value.trim() : value,
+  }));
+};
+
+ const getValidToken = async (): Promise<string | null> => {
+  const token = localStorage.getItem("access");
+  if (!token) return null;
+  try {
+    // Try decoding to check expiry (assuming exp in seconds)
+    const decoded: any = jwtDecode(token);
+    if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+      // Token expired, try to refresh
+      return await refreshAccessToken();
+    }
+    return token;
+  } catch {
+    // If decode fails, try to refresh
+    return await refreshAccessToken();
+  }
+};
+
+const handleSubmitProduct = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError(null);
+
+  const { name, product_type, quantity, acres } = formData;
+  if (!name || !product_type || !quantity || !acres) {
+    setError("All fields are required.");
+    return;
+  }
+
+  const quantityNum = Number(quantity);
+  const acresNum = Number(acres);
+
+  const payload = {
+    title: name,
+    variety: product_type,
+    quantity: quantityNum,
+    acres: acresNum,
+    description: "",
+    price: 0,
   };
 
-  const handleSubmitProduct = async () => {
-    if (!termsRead || !termsScrolled) {
-      setError("Please read and accept the terms and conditions.");
+  const attemptRequest = async (accessToken: string) => {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    return { res, data };
+  };
+
+  let token = localStorage.getItem("access");
+  let response = await attemptRequest(token!);
+
+  // If 401, try refreshing
+  if (response.res.status === 401) {
+    const refresh = localStorage.getItem("refresh");
+    if (!refresh) {
+      setError("Session expired. Please log in again.");
       return;
     }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
+      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          ...formData,
-          quantity: parseFloat(formData.quantity),
-          acres: parseFloat(formData.acres),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
       });
+      const refreshData = await refreshRes.json();
+      if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
 
-      if (!res.ok) throw new Error("Failed to add product");
-      setFormData({ name: "", product_type: "", quantity: "", acres: "" });
-      setOpenTerms(false);
-      fetchProducts(accessToken!);
-      setActiveSection("products");
+      token = refreshData.access;
+      if (token) {
+        localStorage.setItem("access", token);
+      }
+
+      // Retry request with new token
+      if (token) {
+        response = await attemptRequest(token);
+      } else {
+        setError("Session expired. Please log in again.");
+        return;
+      }
     } catch (err) {
-      console.error("Error adding product:", err);
-      setError("Failed to add product. Please try again.");
+      console.error("Token refresh failed:", err);
+      setError("Session expired. Please log in again.");
+      return;
     }
-  };
+  }
+
+  if (!response.res.ok) {
+    console.error("Backend error:", response.data);
+    let errorMessage = "Failed to add product. Please check your input.";
+    if (response.data) {
+      if (response.data.title) errorMessage = response.data.title.join(", ");
+      else if (response.data.detail) errorMessage = response.data.detail;
+    }
+    setError(errorMessage);
+    return;
+  }
+
+  // Success
+  setProducts((prev) => [...prev, response.data]);
+  setFormData({ name: "", product_type: "", quantity: "", acres: "" });
+  setTermsRead(false);
+  setTermsScrolled(false);
+  setOpenTerms(false);
+};
+
 
   const handleSubmitFeedback = async () => {
     if (!newFeedback.trim()) {
@@ -221,7 +378,7 @@ export default function Dashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${localStorage.getItem("access")}`,
         },
         body: JSON.stringify({ message: newFeedback }),
       });

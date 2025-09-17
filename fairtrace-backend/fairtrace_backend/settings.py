@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'users',
     'farmers',
     'products',
+    'feedbacks',
+    'payments',
 ]
 
 # Web3 / contract settings
