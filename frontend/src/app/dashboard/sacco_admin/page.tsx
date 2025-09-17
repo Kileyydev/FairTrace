@@ -3,14 +3,19 @@ import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableContainer,
+  Paper,
   Button,
-  Card,
-  CardContent,
-  CardMedia,
   Dialog,
   DialogTitle,
   DialogContent,
   TextField,
+  CircularProgress,
 } from "@mui/material";
 
 interface Farmer {
@@ -56,11 +61,14 @@ export default function SaccoAdmin() {
     let token = localStorage.getItem("access");
     const refresh = localStorage.getItem("refresh");
     if (!token && refresh) {
-      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh }),
-      });
+      const refreshRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh }),
+        }
+      );
       if (!refreshRes.ok) return null;
       const refreshData = await refreshRes.json();
       token = refreshData.access;
@@ -78,9 +86,12 @@ export default function SaccoAdmin() {
     }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/?limit=20`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/?limit=20`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       if (!res.ok) {
         const errData = await res.json();
         setError(errData.detail || "Failed to fetch products.");
@@ -100,9 +111,10 @@ export default function SaccoAdmin() {
     if (!token) return;
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/${product.uid}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/${product.uid}/`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (!res.ok) return;
       const stages = await res.json();
       setSelectedProduct({ ...product, stages });
@@ -141,52 +153,90 @@ export default function SaccoAdmin() {
         Sacco Admin Dashboard
       </Typography>
       {error && <Typography color="error">{error}</Typography>}
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-        {products.map((product) => (
-          <Card key={product.uid} sx={{ width: 300 }}>
-            {product.qr_code_data && (
-              <CardMedia component="img" height="140" image={product.qr_code_data} alt="QR Code" />
-            )}
-            <CardContent>
-              <Typography variant="h6">
-                {product.title} ({product.variety})
-              </Typography>
-              <Typography>
-                Farmer: {product.farmer.first_name} - {product.farmer.email}
-              </Typography>
-              <Typography>Phone: {product.farmer.phone_number}</Typography>
-              <Typography>Location: {product.farmer.location}</Typography>
-              <Typography>
-                Quantity: {product.quantity}, Acres: {product.acres}
-              </Typography>
-              <Typography>Status: {product.status}</Typography>
-              {product.status === "Pending" && (
-                <Button onClick={() => fetchProductStages(product)}>Review</Button>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
 
-      <Dialog open={!!selectedProduct} onClose={() => setSelectedProduct(null)} fullWidth maxWidth="sm">
+      <TableContainer component={Paper} sx={{ mt: 2 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Title</TableCell>
+              <TableCell>Variety</TableCell>
+              <TableCell>Farmer</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Phone</TableCell>
+              <TableCell>Location</TableCell>
+              <TableCell>Quantity</TableCell>
+              <TableCell>Acres</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {products.map((product) => (
+              <TableRow key={product.uid}>
+                <TableCell>{product.title}</TableCell>
+                <TableCell>{product.variety}</TableCell>
+                <TableCell>{product.farmer.first_name}</TableCell>
+                <TableCell>{product.farmer.email}</TableCell>
+                <TableCell>{product.farmer.phone_number}</TableCell>
+                <TableCell>{product.farmer.location}</TableCell>
+                <TableCell>{product.quantity}</TableCell>
+                <TableCell>{product.acres}</TableCell>
+                <TableCell>{product.status}</TableCell>
+                <TableCell>
+                  {product.status === "Pending" && (
+                    <Button onClick={() => fetchProductStages(product)}>Review</Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog
+        open={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        fullWidth
+        maxWidth="md"
+      >
         <DialogTitle>Review Product</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {loadingStages ? (
-            <Typography>Loading stages...</Typography>
+            <CircularProgress />
           ) : (
             <>
-              <Typography>Product: {selectedProduct?.title}</Typography>
-              {selectedProduct?.stages?.map((stage) => (
-                <Typography key={stage.id}>
-                  Stage: {stage.stage_name}, Qty: {stage.quantity}, Location: {stage.location}
-                </Typography>
-              ))}
+              <Typography variant="h6">{selectedProduct?.title}</Typography>
+              {selectedProduct?.stages?.length ? (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Stage</TableCell>
+                      <TableCell>Quantity</TableCell>
+                      <TableCell>Location</TableCell>
+                      <TableCell>Scanned QR</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedProduct.stages.map((stage) => (
+                      <TableRow key={stage.id}>
+                        <TableCell>{stage.stage_name}</TableCell>
+                        <TableCell>{stage.quantity}</TableCell>
+                        <TableCell>{stage.location}</TableCell>
+                        <TableCell>{stage.scanned_qr ? "Yes" : "No"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Typography>No stages recorded yet.</Typography>
+              )}
               <TextField
                 label="Admin Review"
                 multiline
                 rows={4}
                 value={review}
                 onChange={(e) => setReview(e.target.value)}
+                sx={{ mt: 2 }}
               />
               <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
                 <Button
