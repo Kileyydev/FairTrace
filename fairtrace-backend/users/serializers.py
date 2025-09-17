@@ -6,6 +6,7 @@ from farmers.utils import canonical_farmer_string, sha256_hex
 from django.core.mail import send_mail
 from django.contrib.auth.hashers import check_password
 from datetime import timedelta
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -142,3 +143,11 @@ class ProductStageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductStage
         fields = "__all__"
+
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        # Add custom claims
+        token['is_sacco_admin'] = user.is_sacco_admin
+        return token

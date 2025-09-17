@@ -7,8 +7,9 @@ from datetime import datetime, timedelta
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import MyTokenObtainPairSerializer
 import hashlib, secrets
-
 from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer, ProductSerializer, ProductStageSerializer
 from .models import OTPToken, User, Product, ProductStage
 from farmers.models import Farmer
@@ -122,10 +123,9 @@ class LoginAPIView(APIView):
 # Verify OTP (issue JWT)
 # ----------------------------
 class VerifyOTPAPIView(APIView):
-    permission_classes = [AllowAny]  # endpoint should be callable without auth (your login already checked creds)
+    permission_classes = [AllowAny]  # Login already verified credentials
 
     def post(self, request, *args, **kwargs):
-        # Debug: show exactly what arrived (dev only)
         print("===== VERIFY OTP: incoming request.data =====")
         try:
             print(request.data)
@@ -147,45 +147,42 @@ class VerifyOTPAPIView(APIView):
         email = data.get("email")
         user_id = data.get("user_id")
 
-        # Resolve user by id or email
+        # Resolve user
         try:
-            if user_id:
-                user = User.objects.get(id=user_id)
-            else:
-                user = User.objects.get(email=email)
+            user = User.objects.get(id=user_id) if user_id else User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({"detail": "user not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Query non-expired tokens for that user
+        # Query non-expired tokens
         now = timezone.now()
         tokens_qs = OTPToken.objects.filter(user=user, expires_at__gte=now).order_by("-created_at")
-
-        # Debug: show how many candidate tokens we checked
         print(f"Found {tokens_qs.count()} non-expired tokens for user {user.email}")
 
-        # Compare hashed OTP to stored otp_hash
+        # Compare OTP
         otp_hash = hashlib.sha256(otp.encode()).hexdigest()
         for token in tokens_qs:
             print(f"Checking token id={token.id} created_at={token.created_at}")
             if token.otp_hash == otp_hash:
-                # SUCCESS: consume the token (delete it) and issue JWT
+                # Success: consume token and issue JWT with custom claims
                 try:
                     token.delete()
                 except Exception as e:
                     print(f"Warning: failed to delete OTP token id={token.id}: {e}")
 
-                refresh = RefreshToken.for_user(user)
+                refresh = MyTokenObtainPairSerializer.get_token(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+
                 return Response({
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
+                    "refresh": refresh_token,
+                    "access": access_token,
                 }, status=status.HTTP_200_OK)
 
-        # If we reach here, no tokens matched
+        # No matching tokens
         return Response(
             {"detail": "Invalid or expired OTP", "checked": tokens_qs.count()},
             status=status.HTTP_400_BAD_REQUEST
         )
-
 # ----------------------------
 # Product APIs
 # ----------------------------
@@ -236,3 +233,8 @@ class UpdateProductStageAPIView(APIView):
             scanned_qr=True
         )
         return Response({"detail": "Stage updated"}, status=status.HTTP_201_CREATED)
+
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer

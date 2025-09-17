@@ -74,3 +74,68 @@ class PostLocationAPIView(APIView):
         tl = TransportLocation.objects.create(product=product, lat=lat, lng=lng)
         # optional: notify via socket.io (we will)
         return Response(TransportLocationSerializer(tl).data, status=201)
+    
+    
+# views.py
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import Product
+from .serializers import AdminProductSerializer
+import uuid
+import qrcode
+import io
+from base64 import b64encode
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def approve_product(request, product_uid):
+    try:
+        product = Product.objects.get(uid=product_uid)
+        if request.data.get("action") == "approve":
+            # Generate PID
+            product.pid = str(uuid.uuid4())
+            product.status = "Approved"
+            
+            # Generate QR code with PID
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(product.pid)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            product.qr_code_data = "data:image/png;base64," + b64encode(buffer.getvalue()).decode()
+            
+            # TODO: Store approved product info on blockchain
+            # store_on_blockchain(product)
+            
+            product.save()
+            return Response(AdminProductSerializer(product).data)
+        elif request.data.get("action") == "reject":
+            product.status = "Rejected"
+            product.admin_reason = request.data.get("review", "")
+            product.save()
+            return Response(AdminProductSerializer(product).data)
+        else:
+            return Response({"detail": "Invalid action"}, status=400)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found"}, status=404)
+
+def all_products(request):
+    if not request.user.is_sacco_admin:
+        return Response({"detail": "Not authorized"}, status=403)
+    products = Product.objects.all()
+    serializer = AdminProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+def sacco_admin_products(request):
+    products = Product.objects.all().order_by('-created_at')
+    serializer = ProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+class SaccoAdminProductsView(APIView):
+     def get(self, request):
+        products = Product.objects.all()
+        serializer = AdminProductSerializer(products, many=True)
+        return Response(serializer.data)
+

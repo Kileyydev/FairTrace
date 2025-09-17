@@ -1,4 +1,3 @@
-// LoginPage.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -33,7 +32,7 @@ interface Errors {
 
 interface JwtPayload {
   user_id: number;
-  is_sacco_admin: boolean;
+  is_sacco_admin?: boolean; // optional in case JWT doesn't include it
   exp: number;
 }
 
@@ -74,7 +73,6 @@ export default function LoginPage() {
 
     try {
       if (step === 0) {
-        // Step 1: verify email & password
         const res = await fetch(`${API_BASE}/users/login/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -97,7 +95,6 @@ export default function LoginPage() {
           });
         }
       } else if (step === 1) {
-        // Step 2: verify OTP
         const requestBody = {
           email: formData.email.trim(),
           otp: formData.otp.trim(),
@@ -121,9 +118,14 @@ export default function LoginPage() {
           localStorage.setItem("refresh", data.refresh);
 
           const decoded: JwtPayload = jwtDecode(data.access);
-          router.push(
-            decoded.is_sacco_admin ? "/admin-dashboard" : "/dashboard"
-          );
+
+          // DEBUG: make sure we see the JWT payload
+          console.log("Decoded JWT:", decoded);
+
+          // Fallback: if is_sacco_admin missing, treat as false
+          const isAdmin = decoded.is_sacco_admin ?? false;
+
+          router.push(isAdmin ? "/dashboard/sacco_admin" : "/dashboard");
         } else {
           setErrors({
             ...errors,

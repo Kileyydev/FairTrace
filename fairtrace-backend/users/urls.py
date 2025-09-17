@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import RegisterAPIView, LoginAPIView, VerifyOTPAPIView
-from .views import ProductRegisterAPIView, ProductListAPIView, ProductStageListAPIView, UpdateProductStageAPIView
+from .views import ProductRegisterAPIView, ProductListAPIView, ProductStageListAPIView, UpdateProductStageAPIView, MyTokenObtainPairView
 
 urlpatterns = [
 path('register/', RegisterAPIView.as_view(), name='register'),
@@ -10,6 +10,7 @@ path("register/", ProductRegisterAPIView.as_view(), name="product-register"),
 path("", ProductListAPIView.as_view(), name="product-list"),
 path("<uuid:pid>/stages/", ProductStageListAPIView.as_view(), name="product-stages"),
 path("<uuid:pid>/update-stage/", UpdateProductStageAPIView.as_view(), name="update-stage"),
+ #path('login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
 ]
 
 
