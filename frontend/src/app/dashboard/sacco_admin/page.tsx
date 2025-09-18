@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import {
   Box,
@@ -17,6 +18,8 @@ import {
   TextField,
   CircularProgress,
 } from "@mui/material";
+import TopNavBar from "@/app/components/TopNavBar";
+import Footer from "@/app/components/FooterSection";
 
 interface Farmer {
   first_name: string;
@@ -258,6 +261,7 @@ export default function SaccoAdmin() {
           )}
         </DialogContent>
       </Dialog>
+      <Footer />
     </Box>
   );
 }

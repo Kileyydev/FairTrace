@@ -3,6 +3,7 @@
 import React from "react";
 import { Box, Typography, Button, Container } from "@mui/material";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
 // Dynamically import react-slick to prevent SSR issues
 const Slider = dynamic(() => import("react-slick"), { ssr: false });
@@ -20,9 +21,7 @@ const settings = {
   arrows: false,
 };
 
-const images: string[] = [
-  "/images/tear5.webp",
-];
+const images: string[] = ["/images/tear5.webp"];
 
 export default function HeroSection() {
   return (
@@ -33,12 +32,18 @@ export default function HeroSection() {
             key={index}
             sx={{
               height: "80vh",
-              backgroundImage: `url(${img})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: "brightness(0.85)",
+              position: "relative",
+              width: "100%",
             }}
-          />
+          >
+            <Image
+              src={img}
+              alt={`Slide ${index}`}
+              layout="fill"
+              objectFit="cover"
+              quality={85}
+            />
+          </Box>
         ))}
       </Slider>
 
