@@ -90,7 +90,7 @@ export default function SaccoAdmin() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/?limit=20`,
+        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -115,7 +115,7 @@ export default function SaccoAdmin() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/${product.uid}/`,
+        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) return;
@@ -128,27 +128,43 @@ export default function SaccoAdmin() {
     }
   };
 
-  const handleAction = async (product: Product, action: "approve" | "reject") => {
-    const token = await getValidAccessToken();
-    if (!token) return;
+ const handleAction = async (product: Product, action: "approve" | "reject") => {
+  const token = await getValidAccessToken();
+  if (!token) return;
 
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/stages/${product.uid}/approve/`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action, review }),
-        }
-      );
-      const data = await res.json();
-      setProducts((prev) => prev.map((p) => (p.uid === data.uid ? data : p)));
-      setSelectedProduct(null);
-      setReview("");
-    } catch (err) {
-      console.error(err);
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action, review }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json();
+      setError(err.detail || "Failed to process action.");
+      return;
     }
-  };
+
+    const data = await res.json();
+
+    // Update table with new product data
+    setProducts((prev) => prev.map((p) => (p.uid === data.uid ? data : p)));
+
+    // Close dialog
+    setSelectedProduct(null);
+    setReview("");
+  } catch (err) {
+    console.error(err);
+    setError("Something went wrong. Try again.");
+  }
+};
+
 
   return (
     <Box sx={{ p: 4 }}>
@@ -175,7 +191,11 @@ export default function SaccoAdmin() {
           </TableHead>
           <TableBody>
             {products.map((product) => (
-              <TableRow key={product.uid}>
+              <TableRow key={product.uid}
+              hover
+              sx={{ cursor: "pointer" }}
+              onClick={() => window.location.href = `/dashboard/sacco_admin/${product.uid}`}
+  >
                 <TableCell>{product.title}</TableCell>
                 <TableCell>{product.variety}</TableCell>
                 <TableCell>{product.farmer.first_name}</TableCell>

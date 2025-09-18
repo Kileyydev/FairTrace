@@ -1,10 +1,11 @@
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import viewsets
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Product, ProductImage, TransportLocation
-from .serializers import ProductSerializer, ProductImageSerializer, TransportLocationSerializer
+from .models import Product, ProductImage, TransportLocation, Stage
+from .serializers import ProductSerializer, ProductImageSerializer, TransportLocationSerializer, StageSerializer
 from .utils import generate_pid, create_qr_data_url
 from tasks.anchor import enqueue_anchor  # we'll create a simple task enqueuer
 
@@ -139,3 +140,7 @@ class SaccoAdminProductsView(APIView):
         serializer = AdminProductSerializer(products, many=True)
         return Response(serializer.data)
 
+class StageViewSet(viewsets.ModelViewSet):
+    queryset = Stage.objects.all()
+    serializer_class = StageSerializer
+    lookup_field = "uid"   # 👈 this tells DRF to use the uuid field

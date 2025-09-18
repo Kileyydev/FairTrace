@@ -79,3 +79,16 @@ class TransportLocation(models.Model):
 
     def __str__(self):
         return f"{self.product.title} @ ({self.lat}, {self.lng})"
+
+# products/models.py
+from django.db import models
+import uuid
+
+class Stage(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
