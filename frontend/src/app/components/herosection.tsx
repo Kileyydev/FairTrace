@@ -21,7 +21,7 @@ const settings = {
   arrows: false,
 };
 
-const images: string[] = ["/images/tear5.webp"];
+const images: string[] = ["/images/R.jpg"];
 
 export default function HeroSection() {
   return (

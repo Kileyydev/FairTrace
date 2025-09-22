@@ -4,9 +4,9 @@
 import type * as fairTraceRegistrySol from "./FairTraceRegistry.sol";
 export type { fairTraceRegistrySol };
 export type { Counter } from "./Counter";
+export type { ProductRegistry } from "./ProductRegistry";
 export * as factories from "./factories";
 export { Counter__factory } from "./factories/Counter__factory";
-export type { FairTraceRegistry } from "./FairTraceRegistry.sol/FairTraceRegistry";
-export { FairTraceRegistry__factory } from "./factories/FairTraceRegistry.sol/FairTraceRegistry__factory";
 export type { FarmerRegistry } from "./FairTraceRegistry.sol/FarmerRegistry";
 export { FarmerRegistry__factory } from "./factories/FairTraceRegistry.sol/FarmerRegistry__factory";
+export { ProductRegistry__factory } from "./factories/ProductRegistry__factory";

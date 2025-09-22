@@ -5,6 +5,24 @@ Django settings for fairtrace_backend project.
 from pathlib import Path
 from decouple import config
 import os
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+
+# Load .env file
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 
 # Base directory
@@ -49,6 +67,16 @@ CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 # settings.py
 USE_TZ = True
 TIME_ZONE = 'Africa/Nairobi'
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+PRODUCT_REGISTRY_ADDRESS = os.getenv("PRODUCT_REGISTRY_ADDRESS")
+WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "http://127.0.0.1:8545")
+
+
 
 # Middleware
 MIDDLEWARE = [
@@ -143,5 +171,11 @@ REST_FRAMEWORK = {
     ),
 }
 
+# settings.py
+import os
+
+WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "http://127.0.0.1:8545")  
+
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+

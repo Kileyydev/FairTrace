@@ -1,38 +1,37 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.18;
 
 contract ProductRegistry {
-    address public owner;
-
-    struct Entry {
-        address farmer;
+    struct ProductRecord {
         string pid;
-        bytes32 recordHash;
+        string title;
+        string farmerEmail;
         uint256 timestamp;
+        string metadataURI; // optional pointer to off-chain metadata
     }
 
-    mapping(string => Entry) public entries;
-
-    event ProductAnchored(address indexed farmer, string pid, bytes32 recordHash, uint256 timestamp);
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "only owner");
-        _;
-    }
+    address public owner;
+    mapping(string => ProductRecord) public records; // pid => record
+    event ProductRegistered(string pid, string title, string farmerEmail, uint256 timestamp);
 
     constructor() {
         owner = msg.sender;
     }
 
-    function anchorProduct(address farmer, string memory pid, bytes32 recordHash) public onlyOwner returns (bool) {
-        require(entries[pid].timestamp == 0, "already anchored");
-        entries[pid] = Entry(farmer, pid, recordHash, block.timestamp);
-        emit ProductAnchored(farmer, pid, recordHash, block.timestamp);
-        return true;
+    // Registers a product. Only owner (backend) expected to call.
+    function registerProduct(
+        string calldata pid,
+        string calldata title,
+        string calldata farmerEmail,
+        string calldata metadataURI
+    ) external {
+        require(bytes(pid).length > 0, "pid required");
+        require(bytes(records[pid].pid).length == 0, "pid exists");
+        records[pid] = ProductRecord(pid, title, farmerEmail, block.timestamp, metadataURI);
+        emit ProductRegistered(pid, title, farmerEmail, block.timestamp);
     }
 
-    function getEntry(string memory pid) public view returns (address, string memory, bytes32, uint256) {
-        Entry memory e = entries[pid];
-        return (e.farmer, e.pid, e.recordHash, e.timestamp);
+    function getProduct(string calldata pid) external view returns (ProductRecord memory) {
+        return records[pid];
     }
 }

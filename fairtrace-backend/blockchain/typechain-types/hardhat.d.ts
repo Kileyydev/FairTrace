@@ -18,13 +18,13 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Counter__factory>;
     getContractFactory(
-      name: "FairTraceRegistry",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.FairTraceRegistry__factory>;
-    getContractFactory(
       name: "FarmerRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.FarmerRegistry__factory>;
+    getContractFactory(
+      name: "ProductRegistry",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ProductRegistry__factory>;
 
     getContractAt(
       name: "Counter",
@@ -32,28 +32,28 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.Counter>;
     getContractAt(
-      name: "FairTraceRegistry",
+      name: "FarmerRegistry",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.FairTraceRegistry>;
+    ): Promise<Contracts.FarmerRegistry>;
     getContractAt(
-      name: "FarmerRegistry",
+      name: "ProductRegistry",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.FarmerRegistry>;
+    ): Promise<Contracts.ProductRegistry>;
 
     deployContract(
       name: "Counter",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Counter>;
     deployContract(
-      name: "FairTraceRegistry",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.FairTraceRegistry>;
-    deployContract(
       name: "FarmerRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.FarmerRegistry>;
+    deployContract(
+      name: "ProductRegistry",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ProductRegistry>;
 
     deployContract(
       name: "Counter",
@@ -61,15 +61,15 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Counter>;
     deployContract(
-      name: "FairTraceRegistry",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.FairTraceRegistry>;
-    deployContract(
       name: "FarmerRegistry",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.FarmerRegistry>;
+    deployContract(
+      name: "ProductRegistry",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ProductRegistry>;
 
     // default types
     getContractFactory(

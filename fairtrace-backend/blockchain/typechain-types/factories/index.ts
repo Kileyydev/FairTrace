@@ -3,3 +3,4 @@
 /* eslint-disable */
 export * as fairTraceRegistrySol from "./FairTraceRegistry.sol";
 export { Counter__factory } from "./Counter__factory";
+export { ProductRegistry__factory } from "./ProductRegistry__factory";

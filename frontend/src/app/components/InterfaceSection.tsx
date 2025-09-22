@@ -70,7 +70,7 @@ export default function InterfaceSection() {
             }}
           >
             <img
-              src="/images/fairtrade.jpg"
+              src="/images/OIP.webp"
               alt="FairTrace Web Interface"
               style={{ width: "100%", height: "auto" }}
             />

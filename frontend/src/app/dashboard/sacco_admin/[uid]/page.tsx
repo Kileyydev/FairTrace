@@ -93,33 +93,48 @@ export default function ProductDetails() {
 };
 
 
-  const handleAction = async (action: "approve" | "reject") => {
-    const token = await getValidAccessToken();
-    if (!token || !product) return;
+ // in ProductDetails component
+const handleAction = async (action: "approve" | "reject") => {
+  setError(null);
+  const token = await getValidAccessToken();
+  if (!token || !product) return;
 
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ action, review }),
-        }
-      );
-      if (!res.ok) {
-        setError("Failed to submit decision");
-        return;
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action, review }),
       }
-      await res.json();
-      router.push("/dashboard/sacco_admin"); // back to list
-    } catch (err) {
-      console.error(err);
-      setError("Action failed");
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setError(err.detail || err.error || "Failed to submit decision");
+      return;
     }
-  };
+
+    const data = await res.json();
+
+    // update product in UI with returned data
+    setProduct((prev) => ({ ...(prev as Product), ...data }));
+
+    // If approved, show QR and PID on the page (they're now in product)
+    if (data.status === "approved") {
+      alert("Product approved. PID: " + data.pid);
+    } else {
+      alert("Product rejected.");
+    }
+  } catch (err) {
+    console.error(err);
+    setError("Action failed");
+  }
+};
+
 
   useEffect(() => {
     fetchProduct();

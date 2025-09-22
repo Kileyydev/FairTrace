@@ -71,7 +71,7 @@ export default function CTASection() {
           >
             <Typography variant="body1" sx={{ color: "#4a6b5e" }}>
               <img
-              src="/images/farm.jpeg"
+              src="/images/CTA.jpg"
               alt="FairTrace Web Interface"
               style={{ width: "100%", height: "100%" }}
             />
