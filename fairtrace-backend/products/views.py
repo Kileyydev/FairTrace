@@ -41,6 +41,9 @@ class PendingProductsAPIView(generics.ListAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.filter(status="pending").order_by("-created_at")
 
+from django.core.mail import send_mail
+from django.conf import settings
+
 class ApproveProductAPIView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
@@ -48,20 +51,76 @@ class ApproveProductAPIView(APIView):
         product = get_object_or_404(Product, uid=uid)
         action = request.data.get("action")
         reason = request.data.get("reason", "")
+
         if action == "approve":
+            # ✅ Update product
             product.status = "approved"
             product.approved_at = timezone.now()
             product.pid = generate_pid(product)
             product.qr_code_data = create_qr_data_url(product.pid)  # data:image/png;base64,...
+            product.admin_reason = reason
             product.save()
-            # enqueue anchor (async) — we'll implement a simple job runner
+
+            # ✅ Enqueue blockchain anchor
             enqueue_anchor(product.id)
-            return Response({"detail":"approved","pid":product.pid}, status=200)
+
+            # ✅ Send approval email
+            try:
+                send_mail(
+                    subject="Your product has been approved ✅",
+                    message=(
+                        f"Dear {product.farmer.full_name},\n\n"
+                        f"Your product '{product.title}' has been approved.\n\n"
+                        f"PID: {product.pid}\n\n"
+                        f"Next steps: Your product is now live on FairTrace.\n"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[product.farmer.email],
+                    fail_silently=True,
+                )
+            except Exception as e:
+                print("Email error:", e)
+
+            # ✅ Response payload
+            return Response({
+                "uid": str(product.uid),
+                "status": product.status,
+                "pid": product.pid,
+                "qr_code_data": product.qr_code_data,
+                "admin_reason": product.admin_reason,
+                "message": f"Product approved successfully. PID: {product.pid}"
+            }, status=200)
+
         else:
+            # ❌ Decline branch
             product.status = "declined"
             product.admin_reason = reason
             product.save()
-            return Response({"detail":"declined"}, status=200)
+
+            # ❌ Send rejection email
+            try:
+                send_mail(
+                    subject="Your product was rejected ❌",
+                    message=(
+                        f"Dear {product.farmer.full_name},\n\n"
+                        f"Unfortunately, your product '{product.title}' was rejected.\n\n"
+                        f"Reason: {reason}\n\n"
+                        f"You may correct the issue and re-submit.\n\n"
+                        f"Regards,\nFairTrace Team"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[product.farmer.email],
+                    fail_silently=True,
+                )
+            except Exception as e:
+                print("Email error:", e)
+
+            return Response({
+                "uid": str(product.uid),
+                "status": product.status,
+                "admin_reason": product.admin_reason,
+                "message": f"Product rejected. Reason: {product.admin_reason}"
+            }, status=200)
 
 class PostLocationAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -289,18 +348,15 @@ class ApproveProductAPIView(APIView):
 
             # --- generate QR code (Data URI) ---
             try:
-                qr_payload = {
-                    "pid": pid,
-                    "product_uid": str(product.uid),
-                    "tx": product.tx_hash
-                }
-                qr_text = json.dumps(qr_payload)
-                qr_img = qrcode.make(qr_text)
+                frontend_base_url = os.environ.get( "FRONTEND_URL", "http://localhost:3000")
+                trace_url = f"{frontend_base_url}/trace/{product.uid}"
+                qr_img = qrcode.make(trace_url)
                 buffered = io.BytesIO()
                 qr_img.save(buffered, format="PNG")
                 img_bytes = buffered.getvalue()
                 data_uri = "data:image/png;base64," + base64.b64encode(img_bytes).decode()
                 product.qr_code_data = data_uri
+
             except Exception as e:
                 print("QR error:", e)
 
@@ -346,3 +402,70 @@ if not raw_address:
     raise ValueError("PRODUCT_REGISTRY_ADDRESS is not set in settings or .env")
 
 contract_address = Web3.to_checksum_address(raw_address)
+
+class ProductTraceAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, uid):
+        product = get_object_or_404(Product, uid=uid)
+        return Response({
+            "title": product.title,
+            "farmer": product.farmer.full_name,
+            "status": product.status,
+            "pid": product.pid,
+            "tx_hash": product.tx_hash,
+            "qr_code_data": product.qr_code_data,
+            "approved_at": product.approved_at,
+        })
+
+class ProductJourneyAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, uid):
+        product = get_object_or_404(Product, uid=uid)
+        stages = Stage.objects.filter(product=product).order_by("created_at")
+        return Response(StageSerializer(stages, many=True).data)
+
+class AddJourneyStageAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, uid):
+        product = get_object_or_404(Product, uid=uid)
+        if not getattr(request.user, "is_transporter", False):
+            return Response({"detail": "Not allowed"}, status=403)
+
+        stage = Stage.objects.create(
+            product=product,
+            actor=request.user,
+            location=request.data.get("location"),
+            description=request.data.get("description"),
+            timestamp=timezone.now()
+        )
+        return Response(StageSerializer(stage).data, status=201)
+
+class TraceProductAPIView(APIView):
+    """
+    Public endpoint → anyone scanning QR can see product details
+    """
+    authentication_classes = []  # 👈 no login required
+    permission_classes = []      # 👈 open to all
+
+    def get(self, request, uid):
+        try:
+            product = Product.objects.get(uid=uid, status="approved")
+        except Product.DoesNotExist:
+            return Response({"detail": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        data = {
+            "uid": str(product.uid),
+            "title": product.title,
+            "status": product.status,
+            "pid": product.pid,
+            "qr_code_data": product.qr_code_data,
+            "farmer": {
+                "name": product.farmer.first_name,
+                "location": getattr(product.farmer, "location", ""),
+            },
+            "tx_hash": product.tx_hash,
+        }
+        return Response(data, status=200)

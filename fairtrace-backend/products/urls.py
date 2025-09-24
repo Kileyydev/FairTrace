@@ -23,5 +23,5 @@ urlpatterns = [
     path("sacco_admin/products/<uuid:uid>/", views.ProductDetailAPIView.as_view(), name="product-detail"),
     path("sacco_admin/stages/", views.StageViewSet.as_view({"get": "list"}), name="sacco-admin-stages"),
     path("sacco_admin/products/<uuid:uid>/decision/", ApproveProductAPIView.as_view(), name="sacco-decision"),
-
+    path("trace/<uuid:uid>/", views.TraceProductAPIView.as_view(), name="trace-product"),
 ]
