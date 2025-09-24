@@ -17,9 +17,11 @@ import {
   DialogContent,
   TextField,
   CircularProgress,
+  Container, // Added missing import
 } from "@mui/material";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
+import { motion } from "framer-motion";
 
 interface Farmer {
   first_name: string;
@@ -128,159 +130,356 @@ export default function SaccoAdmin() {
     }
   };
 
- const handleAction = async (product: Product, action: "approve" | "reject") => {
-  const token = await getValidAccessToken();
-  if (!token) return;
+  const handleAction = async (product: Product, action: "approve" | "reject") => {
+    const token = await getValidAccessToken();
+    if (!token) return;
 
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action, review }),
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action, review }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.detail || "Failed to process action.");
+        return;
       }
-    );
 
-    if (!res.ok) {
-      const err = await res.json();
-      setError(err.detail || "Failed to process action.");
-      return;
+      const data = await res.json();
+      setProducts((prev) => prev.map((p) => (p.uid === data.uid ? data : p)));
+      setSelectedProduct(null);
+      setReview("");
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Try again.");
     }
+  };
 
-    const data = await res.json();
-
-    // Update table with new product data
-    setProducts((prev) => prev.map((p) => (p.uid === data.uid ? data : p)));
-
-    // Close dialog
-    setSelectedProduct(null);
-    setReview("");
-  } catch (err) {
-    console.error(err);
-    setError("Something went wrong. Try again.");
-  }
-};
-
+  // Animation variants
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+  };
 
   return (
-    <Box sx={{ p: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Sacco Admin Dashboard
-      </Typography>
-      {error && <Typography color="error">{error}</Typography>}
-
-      <TableContainer component={Paper} sx={{ mt: 2 }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Title</TableCell>
-              <TableCell>Variety</TableCell>
-              <TableCell>Farmer</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Phone</TableCell>
-              <TableCell>Location</TableCell>
-              <TableCell>Quantity</TableCell>
-              <TableCell>Acres</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {products.map((product) => (
-              <TableRow key={product.uid}
-              hover
-              sx={{ cursor: "pointer" }}
-              onClick={() => window.location.href = `/dashboard/sacco_admin/${product.uid}`}
-  >
-                <TableCell>{product.title}</TableCell>
-                <TableCell>{product.variety}</TableCell>
-                <TableCell>{product.farmer.first_name}</TableCell>
-                <TableCell>{product.farmer.email}</TableCell>
-                <TableCell>{product.farmer.phone_number}</TableCell>
-                <TableCell>{product.farmer.location}</TableCell>
-                <TableCell>{product.quantity}</TableCell>
-                <TableCell>{product.acres}</TableCell>
-                <TableCell>{product.status}</TableCell>
-                <TableCell>
-                  {product.status === "Pending" && (
-                    <Button onClick={() => fetchProductStages(product)}>Review</Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      <Dialog
-        open={!!selectedProduct}
-        onClose={() => setSelectedProduct(null)}
-        fullWidth
-        maxWidth="md"
-      >
-        <DialogTitle>Review Product</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {loadingStages ? (
-            <CircularProgress />
-          ) : (
-            <>
-              <Typography variant="h6">{selectedProduct?.title}</Typography>
-              {selectedProduct?.stages?.length ? (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Stage</TableCell>
-                      <TableCell>Quantity</TableCell>
-                      <TableCell>Location</TableCell>
-                      <TableCell>Scanned QR</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedProduct.stages.map((stage) => (
-                      <TableRow key={stage.id}>
-                        <TableCell>{stage.stage_name}</TableCell>
-                        <TableCell>{stage.quantity}</TableCell>
-                        <TableCell>{stage.location}</TableCell>
-                        <TableCell>{stage.scanned_qr ? "Yes" : "No"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Typography>No stages recorded yet.</Typography>
-              )}
-              <TextField
-                label="Admin Review"
-                multiline
-                rows={4}
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
-                sx={{ mt: 2 }}
-              />
-              <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={() => handleAction(selectedProduct!, "approve")}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="contained"
-                  color="error"
-                  onClick={() => handleAction(selectedProduct!, "reject")}
-                >
-                  Reject
-                </Button>
-              </Box>
-            </>
+    <Box
+      sx={{
+        background: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <TopNavBar />
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0.1,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232f855a' fill-opacity='0.3' fill-rule='evenodd'%3E%3Cpath d='M0 0h60v60H0z'/%3E%3Cpath d='M30 30l15 15-15 15-15-15z'/%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundRepeat: "repeat",
+        }}
+      />
+      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 }, flexGrow: 1 }}>
+        <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
+          <Typography
+            variant="h4"
+            fontWeight="800"
+            sx={{
+              color: "#1e3a2f",
+              mb: 2,
+              fontSize: { xs: "1.8rem", md: "2.2rem" },
+              background: "linear-gradient(90deg, #1e3a2f 0%, #2f855a 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Sacco Admin Dashboard
+          </Typography>
+          {error && (
+            <Typography
+              color="error"
+              sx={{ mb: 1.5, fontSize: "0.85rem", fontWeight: "500" }}
+            >
+              {error}
+            </Typography>
           )}
-        </DialogContent>
-      </Dialog>
+          <TableContainer
+            component={Paper}
+            sx={{
+              borderRadius: 3,
+              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.15)",
+              background: "rgba(255, 255, 255, 0.9)",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <Table>
+              <TableHead>
+                <TableRow
+                  sx={{
+                    background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)",
+                  }}
+                >
+                  {[
+                    "Title",
+                    "Variety",
+                    "Farmer",
+                    "Email",
+                    "Phone",
+                    "Location",
+                    "Quantity",
+                    "Acres",
+                    "Status",
+                    "Actions",
+                  ].map((header) => (
+                    <TableCell
+                      key={header}
+                      sx={{
+                        fontWeight: "700",
+                        color: "#1e3a2f",
+                        fontSize: "0.85rem",
+                        py: 1.2,
+                      }}
+                    >
+                      {header}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow
+                    key={product.uid}
+                    hover
+                    sx={{
+                      cursor: "pointer",
+                      "&:hover": {
+                        background: "rgba(47, 133, 90, 0.05)",
+                      },
+                    }}
+                    onClick={() =>
+                      (window.location.href = `/dashboard/sacco_admin/${product.uid}`)
+                    }
+                  >
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.title}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.variety}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.farmer.first_name}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.farmer.email}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.farmer.phone_number}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.farmer.location}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.quantity}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.acres}
+                    </TableCell>
+                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                      {product.status}
+                    </TableCell>
+                    <TableCell>
+                      {product.status === "Pending" && (
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fetchProductStages(product);
+                            }}
+                            sx={{
+                              textTransform: "none",
+                              color: "#2f855a",
+                              borderColor: "#2f855a",
+                              fontWeight: "600",
+                              borderRadius: 2,
+                              px: 2,
+                              "&:hover": {
+                                background: "#2f855a",
+                                color: "#ffffff",
+                                borderColor: "#2f855a",
+                              },
+                            }}
+                          >
+                            Review
+                          </Button>
+                        </motion.div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </motion.div>
+
+        <Dialog
+          open={!!selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              background: "rgba(255, 255, 255, 0.95)",
+              backdropFilter: "blur(10px)",
+              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)",
+              color: "#1e3a2f",
+              fontWeight: "700",
+              fontSize: "1.1rem",
+              py: 1.5,
+            }}
+          >
+            Review Product: {selectedProduct?.title}
+          </DialogTitle>
+          <DialogContent sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
+            {loadingStages ? (
+              <CircularProgress sx={{ color: "#2f855a", alignSelf: "center" }} />
+            ) : (
+              <>
+                {selectedProduct?.stages?.length ? (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow
+                        sx={{
+                          background: "rgba(47, 133, 90, 0.05)",
+                        }}
+                      >
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
+                          Stage
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
+                          Quantity
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
+                          Location
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
+                          Scanned QR
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {selectedProduct?.stages?.map((stage) => (
+                        <TableRow key={stage.id}>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
+                            {stage.stage_name}
+                          </TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
+                            {stage.quantity}
+                          </TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
+                            {stage.location}
+                          </TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
+                            {stage.scanned_qr ? "Yes" : "No"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.85rem" }}>
+                    No stages recorded yet.
+                  </Typography>
+                )}
+                <TextField
+                  label="Admin Review"
+                  multiline
+                  rows={3}
+                  value={review}
+                  onChange={(e) => setReview(e.target.value)}
+                  fullWidth
+                  sx={{
+                    mt: 1.5,
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2,
+                      background: "rgba(255, 255, 255, 0.7)",
+                      "& fieldset": { borderColor: "#c4d8c9" },
+                      "&:hover fieldset": { borderColor: "#2f855a" },
+                      "&.Mui-focused fieldset": { borderColor: "#276749" },
+                    },
+                    "& .MuiInputLabel-root": { color: "#4a6b5e" },
+                    "& .MuiInputLabel-root.Mui-focused": { color: "#276749" },
+                  }}
+                />
+                <Box sx={{ display: "flex", gap: 1.5, mt: 1.5, justifyContent: "flex-end" }}>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => handleAction(selectedProduct!, "approve")}
+                      sx={{
+                        background: "linear-gradient(45deg, #2f855a 0%, #4caf50 100%)",
+                        color: "#ffffff",
+                        textTransform: "none",
+                        fontWeight: "600",
+                        borderRadius: 2,
+                        px: 2.5,
+                        "&:hover": {
+                          background: "linear-gradient(45deg, #276749 0%, #388e3c 100%)",
+                        },
+                      }}
+                    >
+                      Approve
+                    </Button>
+                  </motion.div>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => handleAction(selectedProduct!, "reject")}
+                      sx={{
+                        background: "linear-gradient(45deg, #d32f2f 0%, #b71c1c 100%)",
+                        color: "#ffffff",
+                        textTransform: "none",
+                        fontWeight: "600",
+                        borderRadius: 2,
+                        px: 2.5,
+                        "&:hover": {
+                          background: "linear-gradient(45deg, #b71c1c 0%, #9a0007 100%)",
+                        },
+                      }}
+                    >
+                      Reject
+                    </Button>
+                  </motion.div>
+                </Box>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      </Container>
       <Footer />
     </Box>
   );

@@ -21,7 +21,7 @@ const settings = {
   arrows: false,
 };
 
-const images: string[] = ["/images/R.jpg"];
+const images: string[] = ["/images/Farm.jpg"];
 
 export default function HeroSection() {
   return (

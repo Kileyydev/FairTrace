@@ -214,7 +214,6 @@ export default function LoginPage() {
           <Box
             sx={{
               background: "#ffffff",
-              borderRadius: "12px",
               boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
               border: "1px solid #c4d8c9",
               p: 4,
@@ -290,7 +289,6 @@ export default function LoginPage() {
                   mt: 3,
                   background: "#2f855a",
                   color: "#ffffff",
-                  borderRadius: "8px",
                   "&:hover": {
                     background: "#276749",
                     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
