@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -28,21 +29,26 @@ export default function TopNavBar() {
     setAnchorEl(null);
   };
 
-  const navigateTo = (path: string) => {
+  const navigateTo = (item: string) => {
+    // Use localhost:3000 for Home, relative paths for others
+    const path = item === "Home" ? "http://localhost:3000" : "/" + item.toLowerCase();
     router.push(path);
     handleMenuClose();
   };
 
   const handleRegisterClick = () => {
     router.push("/register");
+    handleMenuClose();
   };
 
   const handleLoginClick = () => {
     router.push("/login");
+    handleMenuClose();
   };
 
   const handleLogoutClick = () => {
     setIsAuthenticated(false);
+    handleMenuClose();
   };
 
   // Animation variants
@@ -83,18 +89,18 @@ export default function TopNavBar() {
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}
-            onClick={() => navigateTo("/")}
+            onClick={() => navigateTo("Home")}
           >
             FairTrace
           </Typography>
 
           {/* Desktop Navigation */}
           <Box sx={{ display: { xs: "none", md: "flex" }, gap: 1.5, alignItems: "center" }}>
-            {["Home", "About", "Features", "Contact"].map((item) => (
+            {["Home", "About", "Contact"].map((item) => (
               <Button
                 key={item}
                 color="inherit"
-                onClick={() => navigateTo(`/${item.toLowerCase()}`)}
+                onClick={() => navigateTo(item)}
                 sx={{
                   fontWeight: "600",
                   fontSize: "0.9rem",
@@ -102,7 +108,6 @@ export default function TopNavBar() {
                   color: "#e0f2e9",
                   px: 2,
                   py: 0.5,
-
                   "&:hover": {
                     background: "rgba(255, 255, 255, 0.1)",
                     color: "#ffffff",
@@ -126,7 +131,6 @@ export default function TopNavBar() {
                     color: "#e0f2e9",
                     px: 2,
                     py: 0.5,
-
                     background: "rgba(255, 255, 255, 0.05)",
                     "&:hover": {
                       background: "#2f855a",
@@ -198,10 +202,10 @@ export default function TopNavBar() {
                 },
               }}
             >
-              {["Home", "About", "Features", "Contact"].map((item) => (
+              {["Home", "About", "Contact"].map((item) => (
                 <MenuItem
                   key={item}
-                  onClick={() => navigateTo(`/${item.toLowerCase()}`)}
+                  onClick={() => navigateTo(item)}
                   sx={{
                     fontWeight: "600",
                     fontSize: "0.9rem",

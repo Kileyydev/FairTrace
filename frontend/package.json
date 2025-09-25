@@ -27,6 +27,7 @@
     "react-dom": "^19.0.0",
     "react-firebase-hooks": "^5.1.1",
     "react-leaflet": "^5.0.0",
+    "react-parallax-tilt": "^1.7.309",
     "react-slick": "^0.31.0",
     "slick-carousel": "^1.8.1",
     "socket.io-client": "^4.8.1"
