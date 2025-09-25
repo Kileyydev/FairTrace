@@ -49,14 +49,20 @@ export declare namespace FarmerRegistry {
 
 export interface FarmerRegistryInterface extends Interface {
   getFunction(
-    nameOrSignature: "farmers" | "getFarmer" | "registerFarmer"
+    nameOrSignature:
+      | "getAllFarmers"
+      | "getFarmer"
+      | "registerFarmer"
+      | "updateFarmLocation"
   ): FunctionFragment;
 
-  getEvent(nameOrSignatureOrTopic: "FarmerRegistered"): EventFragment;
+  getEvent(
+    nameOrSignatureOrTopic: "FarmerLocationUpdated" | "FarmerRegistered"
+  ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "farmers",
-    values: [BigNumberish]
+    functionFragment: "getAllFarmers",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getFarmer",
@@ -66,13 +72,37 @@ export interface FarmerRegistryInterface extends Interface {
     functionFragment: "registerFarmer",
     values: [string, string, string]
   ): string;
+  encodeFunctionData(
+    functionFragment: "updateFarmLocation",
+    values: [BigNumberish, string]
+  ): string;
 
-  decodeFunctionResult(functionFragment: "farmers", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "getAllFarmers",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "getFarmer", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "registerFarmer",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "updateFarmLocation",
+    data: BytesLike
+  ): Result;
+}
+
+export namespace FarmerLocationUpdatedEvent {
+  export type InputTuple = [farmerId: BigNumberish, newLocation: string];
+  export type OutputTuple = [farmerId: bigint, newLocation: string];
+  export interface OutputObject {
+    farmerId: bigint;
+    newLocation: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace FarmerRegisteredEvent {
@@ -143,17 +173,9 @@ export interface FarmerRegistry extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  farmers: TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [bigint, string, string, string, string] & {
-        farmerId: bigint;
-        fullName: string;
-        nationalIdHash: string;
-        farmLocation: string;
-        wallet: string;
-      }
-    ],
+  getAllFarmers: TypedContractMethod<
+    [],
+    [FarmerRegistry.FarmerStructOutput[]],
     "view"
   >;
 
@@ -169,25 +191,19 @@ export interface FarmerRegistry extends BaseContract {
     "nonpayable"
   >;
 
+  updateFarmLocation: TypedContractMethod<
+    [_farmerId: BigNumberish, _newLocation: string],
+    [void],
+    "nonpayable"
+  >;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
   getFunction(
-    nameOrSignature: "farmers"
-  ): TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [bigint, string, string, string, string] & {
-        farmerId: bigint;
-        fullName: string;
-        nationalIdHash: string;
-        farmLocation: string;
-        wallet: string;
-      }
-    ],
-    "view"
-  >;
+    nameOrSignature: "getAllFarmers"
+  ): TypedContractMethod<[], [FarmerRegistry.FarmerStructOutput[]], "view">;
   getFunction(
     nameOrSignature: "getFarmer"
   ): TypedContractMethod<
@@ -202,7 +218,21 @@ export interface FarmerRegistry extends BaseContract {
     [bigint],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "updateFarmLocation"
+  ): TypedContractMethod<
+    [_farmerId: BigNumberish, _newLocation: string],
+    [void],
+    "nonpayable"
+  >;
 
+  getEvent(
+    key: "FarmerLocationUpdated"
+  ): TypedContractEvent<
+    FarmerLocationUpdatedEvent.InputTuple,
+    FarmerLocationUpdatedEvent.OutputTuple,
+    FarmerLocationUpdatedEvent.OutputObject
+  >;
   getEvent(
     key: "FarmerRegistered"
   ): TypedContractEvent<
@@ -212,6 +242,17 @@ export interface FarmerRegistry extends BaseContract {
   >;
 
   filters: {
+    "FarmerLocationUpdated(uint256,string)": TypedContractEvent<
+      FarmerLocationUpdatedEvent.InputTuple,
+      FarmerLocationUpdatedEvent.OutputTuple,
+      FarmerLocationUpdatedEvent.OutputObject
+    >;
+    FarmerLocationUpdated: TypedContractEvent<
+      FarmerLocationUpdatedEvent.InputTuple,
+      FarmerLocationUpdatedEvent.OutputTuple,
+      FarmerLocationUpdatedEvent.OutputObject
+    >;
+
     "FarmerRegistered(uint256,string,string,address)": TypedContractEvent<
       FarmerRegisteredEvent.InputTuple,
       FarmerRegisteredEvent.OutputTuple,

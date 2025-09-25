@@ -1,7 +1,10 @@
-// scripts/deploy.js
-import { ethers } from "hardhat";
+// scripts/deploy.ts
+import { ethers, network } from "hardhat";
+import fs from "fs";
 
 async function main() {
+  console.log(`🚀 Deploying contracts to network: ${network.name}`);
+
   // Deploy FarmerRegistry
   const FarmerRegistry = await ethers.getContractFactory("FarmerRegistry");
   const farmerRegistry = await FarmerRegistry.deploy();
@@ -15,6 +18,16 @@ async function main() {
   await productRegistry.waitForDeployment();
   const productRegistryAddress = await productRegistry.getAddress();
   console.log("✅ ProductRegistry deployed to:", productRegistryAddress);
+
+  // Save addresses to a file
+  const deployments = {
+    network: network.name,
+    farmerRegistry: farmerRegistryAddress,
+    productRegistry: productRegistryAddress,
+  };
+
+  fs.writeFileSync("deployments.json", JSON.stringify(deployments, null, 2));
+  console.log("📝 Deployment addresses saved to deployments.json");
 }
 
 main().catch((error) => {

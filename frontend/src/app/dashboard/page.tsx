@@ -99,6 +99,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>("dashboard");
   const [formData, setFormData] = useState({
+    farmerName: "",
+    phonenumber: "",
+    location: "",
     name: "",
     product_type: "",
     quantity: "",

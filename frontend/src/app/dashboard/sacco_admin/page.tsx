@@ -17,7 +17,7 @@ import {
   DialogContent,
   TextField,
   CircularProgress,
-  Container, // Added missing import
+  Container,
 } from "@mui/material";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
@@ -57,6 +57,8 @@ export default function SaccoAdmin() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [review, setReview] = useState("");
   const [loadingStages, setLoadingStages] = useState(false);
+  const [farmerDetails, setFarmerDetails] = useState<Record<string, Farmer>>({});
+  const [loadingFarmers, setLoadingFarmers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchProducts();
@@ -66,14 +68,11 @@ export default function SaccoAdmin() {
     let token = localStorage.getItem("access");
     const refresh = localStorage.getItem("refresh");
     if (!token && refresh) {
-      const refreshRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh }),
-        }
-      );
+      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
       if (!refreshRes.ok) return null;
       const refreshData = await refreshRes.json();
       token = refreshData.access;
@@ -91,12 +90,9 @@ export default function SaccoAdmin() {
     }
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) {
         const errData = await res.json();
         setError(errData.detail || "Failed to fetch products.");
@@ -104,9 +100,34 @@ export default function SaccoAdmin() {
       }
       const data = await res.json();
       setProducts(data || []);
+
+      // Pre-fetch farmer details for all products
+      data.forEach((product: Product) => {
+        fetchFarmerDetails(product.farmer.email);
+      });
     } catch (err) {
       console.error(err);
       setError("Failed to load products. Please try again.");
+    }
+  };
+
+  const fetchFarmerDetails = async (email: string) => {
+    if (farmerDetails[email] || loadingFarmers[email]) return;
+    setLoadingFarmers((prev) => ({ ...prev, [email]: true }));
+    const token = await getValidAccessToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/farmers/${email}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch farmer details");
+      const data: Farmer = await res.json();
+      setFarmerDetails((prev) => ({ ...prev, [email]: data }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingFarmers((prev) => ({ ...prev, [email]: false }));
     }
   };
 
@@ -116,10 +137,9 @@ export default function SaccoAdmin() {
     if (!token) return;
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) return;
       const stages = await res.json();
       setSelectedProduct({ ...product, stages });
@@ -139,10 +159,7 @@ export default function SaccoAdmin() {
         `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ action, review }),
         }
       );
@@ -163,7 +180,6 @@ export default function SaccoAdmin() {
     }
   };
 
-  // Animation variants
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -193,7 +209,7 @@ export default function SaccoAdmin() {
           backgroundRepeat: "repeat",
         }}
       />
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 }, flexGrow: 1 }}>
+      <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 }, flexGrow: 1 }}>
         <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
           <Typography
             variant="h4"
@@ -210,13 +226,11 @@ export default function SaccoAdmin() {
             Sacco Admin Dashboard
           </Typography>
           {error && (
-            <Typography
-              color="error"
-              sx={{ mb: 1.5, fontSize: "0.85rem", fontWeight: "500" }}
-            >
+            <Typography color="error" sx={{ mb: 1.5, fontSize: "0.85rem", fontWeight: "500" }}>
               {error}
             </Typography>
           )}
+
           <TableContainer
             component={Paper}
             sx={{
@@ -226,13 +240,9 @@ export default function SaccoAdmin() {
               backdropFilter: "blur(10px)",
             }}
           >
-            <Table>
+            <Table stickyHeader>
               <TableHead>
-                <TableRow
-                  sx={{
-                    background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)",
-                  }}
-                >
+                <TableRow sx={{ background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)" }}>
                   {[
                     "Title",
                     "Variety",
@@ -247,96 +257,88 @@ export default function SaccoAdmin() {
                   ].map((header) => (
                     <TableCell
                       key={header}
-                      sx={{
-                        fontWeight: "700",
-                        color: "#1e3a2f",
-                        fontSize: "0.85rem",
-                        py: 1.2,
-                      }}
+                      sx={{ fontWeight: "700", color: "#1e3a2f", fontSize: "0.85rem", py: 1.2 }}
                     >
                       {header}
                     </TableCell>
                   ))}
                 </TableRow>
               </TableHead>
+
               <TableBody>
-                {products.map((product) => (
-                  <TableRow
-                    key={product.uid}
-                    hover
-                    sx={{
-                      cursor: "pointer",
-                      "&:hover": {
-                        background: "rgba(47, 133, 90, 0.05)",
-                      },
-                    }}
-                    onClick={() =>
-                      (window.location.href = `/dashboard/sacco_admin/${product.uid}`)
-                    }
-                  >
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.title}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.variety}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.farmer.first_name}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.farmer.email}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.farmer.phone_number}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.farmer.location}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.quantity}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.acres}
-                    </TableCell>
-                    <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
-                      {product.status}
-                    </TableCell>
-                    <TableCell>
-                      {product.status === "Pending" && (
-                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              fetchProductStages(product);
-                            }}
-                            sx={{
-                              textTransform: "none",
-                              color: "#2f855a",
-                              borderColor: "#2f855a",
-                              fontWeight: "600",
-                              borderRadius: 2,
-                              px: 2,
-                              "&:hover": {
-                                background: "#2f855a",
-                                color: "#ffffff",
+                {products.map((product) => {
+                  const farmer = farmerDetails[product.farmer.email] || product.farmer;
+                  return (
+                    <TableRow
+                      key={product.uid}
+                      hover
+                      sx={{
+                        cursor: "pointer",
+                        "&:hover": { background: "rgba(47, 133, 90, 0.05)" },
+                      }}
+                      onClick={() =>
+                        (window.location.href = `/dashboard/sacco_admin/${product.uid}`)
+                      }
+                    >
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.title}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.variety}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.first_name}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.email}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                        {loadingFarmers[product.farmer.email] ? (
+                          <CircularProgress size={14} />
+                        ) : (
+                          farmer.phone_number
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>
+                        {loadingFarmers[product.farmer.email] ? (
+                          <CircularProgress size={14} />
+                        ) : (
+                          farmer.location
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.quantity}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.acres}</TableCell>
+                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.status}</TableCell>
+                      <TableCell>
+                        {product.status === "Pending" && (
+                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fetchProductStages(product);
+                              }}
+                              sx={{
+                                textTransform: "none",
+                                color: "#2f855a",
                                 borderColor: "#2f855a",
-                              },
-                            }}
-                          >
-                            Review
-                          </Button>
-                        </motion.div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                                fontWeight: "600",
+                                borderRadius: 2,
+                                px: 2,
+                                "&:hover": {
+                                  background: "#2f855a",
+                                  color: "#ffffff",
+                                  borderColor: "#2f855a",
+                                },
+                              }}
+                            >
+                              Review
+                            </Button>
+                          </motion.div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
         </motion.div>
 
+        {/* Review Dialog (no change from your code) */}
         <Dialog
           open={!!selectedProduct}
           onClose={() => setSelectedProduct(null)}
@@ -370,49 +372,28 @@ export default function SaccoAdmin() {
                 {selectedProduct?.stages?.length ? (
                   <Table size="small">
                     <TableHead>
-                      <TableRow
-                        sx={{
-                          background: "rgba(47, 133, 90, 0.05)",
-                        }}
-                      >
-                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                          Stage
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                          Quantity
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                          Location
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                          Scanned QR
-                        </TableCell>
+                      <TableRow sx={{ background: "rgba(47, 133, 90, 0.05)" }}>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>Stage</TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>Quantity</TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>Location</TableCell>
+                        <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>Scanned QR</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {selectedProduct?.stages?.map((stage) => (
                         <TableRow key={stage.id}>
-                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                            {stage.stage_name}
-                          </TableCell>
-                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                            {stage.quantity}
-                          </TableCell>
-                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                            {stage.location}
-                          </TableCell>
-                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                            {stage.scanned_qr ? "Yes" : "No"}
-                          </TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>{stage.stage_name}</TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>{stage.quantity}</TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>{stage.location}</TableCell>
+                          <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>{stage.scanned_qr ? "Yes" : "No"}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 ) : (
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.85rem" }}>
-                    No stages recorded yet.
-                  </Typography>
+                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.85rem" }}>No stages recorded yet.</Typography>
                 )}
+
                 <TextField
                   label="Admin Review"
                   multiline
@@ -433,6 +414,7 @@ export default function SaccoAdmin() {
                     "& .MuiInputLabel-root.Mui-focused": { color: "#276749" },
                   }}
                 />
+
                 <Box sx={{ display: "flex", gap: 1.5, mt: 1.5, justifyContent: "flex-end" }}>
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Button
@@ -454,6 +436,7 @@ export default function SaccoAdmin() {
                       Approve
                     </Button>
                   </motion.div>
+
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Button
                       variant="contained"

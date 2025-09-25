@@ -29,6 +29,7 @@ export declare namespace ProductRegistry {
     farmerEmail: string;
     timestamp: BigNumberish;
     metadataURI: string;
+    location: string;
   };
 
   export type ProductRecordStructOutput = [
@@ -36,38 +37,83 @@ export declare namespace ProductRegistry {
     title: string,
     farmerEmail: string,
     timestamp: bigint,
-    metadataURI: string
+    metadataURI: string,
+    location: string
   ] & {
     pid: string;
     title: string;
     farmerEmail: string;
     timestamp: bigint;
     metadataURI: string;
+    location: string;
   };
 }
 
 export interface ProductRegistryInterface extends Interface {
   getFunction(
-    nameOrSignature: "getProduct" | "owner" | "records" | "registerProduct"
+    nameOrSignature:
+      | "getAllProducts"
+      | "getProduct"
+      | "owner"
+      | "registerProduct"
+      | "updateProductLocation"
   ): FunctionFragment;
 
-  getEvent(nameOrSignatureOrTopic: "ProductRegistered"): EventFragment;
+  getEvent(
+    nameOrSignatureOrTopic: "ProductLocationUpdated" | "ProductRegistered"
+  ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "getAllProducts",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "getProduct", values: [string]): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
-  encodeFunctionData(functionFragment: "records", values: [string]): string;
   encodeFunctionData(
     functionFragment: "registerProduct",
     values: [string, string, string, string]
   ): string;
+  encodeFunctionData(
+    functionFragment: "updateProductLocation",
+    values: [string, string]
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "getAllProducts",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "getProduct", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "records", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "registerProduct",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "updateProductLocation",
+    data: BytesLike
+  ): Result;
+}
+
+export namespace ProductLocationUpdatedEvent {
+  export type InputTuple = [
+    pid: string,
+    newLocation: string,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    pid: string,
+    newLocation: string,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    pid: string;
+    newLocation: string;
+    timestamp: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace ProductRegisteredEvent {
@@ -75,19 +121,22 @@ export namespace ProductRegisteredEvent {
     pid: string,
     title: string,
     farmerEmail: string,
-    timestamp: BigNumberish
+    timestamp: BigNumberish,
+    metadataURI: string
   ];
   export type OutputTuple = [
     pid: string,
     title: string,
     farmerEmail: string,
-    timestamp: bigint
+    timestamp: bigint,
+    metadataURI: string
   ];
   export interface OutputObject {
     pid: string;
     title: string;
     farmerEmail: string;
     timestamp: bigint;
+    metadataURI: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -138,6 +187,12 @@ export interface ProductRegistry extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  getAllProducts: TypedContractMethod<
+    [],
+    [ProductRegistry.ProductRecordStructOutput[]],
+    "view"
+  >;
+
   getProduct: TypedContractMethod<
     [pid: string],
     [ProductRegistry.ProductRecordStructOutput],
@@ -146,22 +201,14 @@ export interface ProductRegistry extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
-  records: TypedContractMethod<
-    [arg0: string],
-    [
-      [string, string, string, bigint, string] & {
-        pid: string;
-        title: string;
-        farmerEmail: string;
-        timestamp: bigint;
-        metadataURI: string;
-      }
-    ],
-    "view"
-  >;
-
   registerProduct: TypedContractMethod<
     [pid: string, title: string, farmerEmail: string, metadataURI: string],
+    [void],
+    "nonpayable"
+  >;
+
+  updateProductLocation: TypedContractMethod<
+    [pid: string, newLocation: string],
     [void],
     "nonpayable"
   >;
@@ -170,6 +217,13 @@ export interface ProductRegistry extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "getAllProducts"
+  ): TypedContractMethod<
+    [],
+    [ProductRegistry.ProductRecordStructOutput[]],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "getProduct"
   ): TypedContractMethod<
@@ -181,28 +235,27 @@ export interface ProductRegistry extends BaseContract {
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "records"
-  ): TypedContractMethod<
-    [arg0: string],
-    [
-      [string, string, string, bigint, string] & {
-        pid: string;
-        title: string;
-        farmerEmail: string;
-        timestamp: bigint;
-        metadataURI: string;
-      }
-    ],
-    "view"
-  >;
-  getFunction(
     nameOrSignature: "registerProduct"
   ): TypedContractMethod<
     [pid: string, title: string, farmerEmail: string, metadataURI: string],
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "updateProductLocation"
+  ): TypedContractMethod<
+    [pid: string, newLocation: string],
+    [void],
+    "nonpayable"
+  >;
 
+  getEvent(
+    key: "ProductLocationUpdated"
+  ): TypedContractEvent<
+    ProductLocationUpdatedEvent.InputTuple,
+    ProductLocationUpdatedEvent.OutputTuple,
+    ProductLocationUpdatedEvent.OutputObject
+  >;
   getEvent(
     key: "ProductRegistered"
   ): TypedContractEvent<
@@ -212,7 +265,18 @@ export interface ProductRegistry extends BaseContract {
   >;
 
   filters: {
-    "ProductRegistered(string,string,string,uint256)": TypedContractEvent<
+    "ProductLocationUpdated(string,string,uint256)": TypedContractEvent<
+      ProductLocationUpdatedEvent.InputTuple,
+      ProductLocationUpdatedEvent.OutputTuple,
+      ProductLocationUpdatedEvent.OutputObject
+    >;
+    ProductLocationUpdated: TypedContractEvent<
+      ProductLocationUpdatedEvent.InputTuple,
+      ProductLocationUpdatedEvent.OutputTuple,
+      ProductLocationUpdatedEvent.OutputObject
+    >;
+
+    "ProductRegistered(string,string,string,uint256,string)": TypedContractEvent<
       ProductRegisteredEvent.InputTuple,
       ProductRegisteredEvent.OutputTuple,
       ProductRegisteredEvent.OutputObject
