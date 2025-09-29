@@ -1,315 +1,224 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import {
-  Box,
-  Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  TableContainer,
-  Paper,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  TextField,
-  CircularProgress,
-  Container,
-} from "@mui/material";
-import TopNavBar from "@/app/components/TopNavBar";
-import Footer from "@/app/components/FooterSection";
-import { motion } from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { Box, Container, Typography, TextField, Button, Tabs, Tab, CircularProgress } from "@mui/material";
+import dynamic from "next/dynamic";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { useMapEvents, MapContainerProps } from "react-leaflet";
+import TopNavBar from "../components/TopNavBar";
+import Footer from "../components/FooterSection";
 
-interface Farmer {
+const customIcon = new L.Icon({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false }) as React.ComponentType<MapContainerProps>;
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+
+interface FormData {
   fullName: string;
-  email: string;
+  nationalId: string;
   phone: string;
+  email: string;
   farmAddress: string;
   gpsLat: string;
   gpsLong: string;
-  farmSize?: string;
-  mainCrops?: string;
+  farmSize: string;
+  mainCrops: string;
+  saccoMembership: string;
+  password: string;
+  confirmPassword: string;
+}
+
+interface Errors {
+  fullName?: string;
+  nationalId?: string;
+  phone?: string;
+  email?: string;
+  farmAddress?: string;
+  gps?: string;
   saccoMembership?: string;
+  password?: string;
+  confirmPassword?: string;
 }
 
-interface ProductStage {
-  id: string;
-  stage_name: string;
-  quantity: number;
-  location: string;
-  scanned_qr: boolean;
+function LocationMarker({ setPosition }: { setPosition: React.Dispatch<React.SetStateAction<[number, number]>> }) {
+  useMapEvents({
+    click(e: L.LeafletMouseEvent) {
+      setPosition([e.latlng.lat, e.latlng.lng]);
+    },
+  });
+  return null;
 }
 
-interface Product {
-  uid: string;
-  title: string;
-  variety: string;
-  quantity: number;
-  acres: number;
-  status: string;
-  farmer: { email: string }; // Only email comes from product payload
-  qr_code_data: string | null;
-  description: string;
-  stages?: ProductStage[];
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
 }
 
-export default function SaccoAdmin() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [review, setReview] = useState("");
-  const [loadingStages, setLoadingStages] = useState(false);
+function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+  return (
+    <div role="tabpanel" hidden={value !== index} {...other}>
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
-  const [farmerDetails, setFarmerDetails] = useState<Record<string, Farmer>>({});
-  const [loadingFarmers, setLoadingFarmers] = useState<Record<string, boolean>>({});
+export default function RegisterPage() {
+  const [formData, setFormData] = useState<FormData>({
+    fullName: "",
+    nationalId: "",
+    phone: "",
+    email: "",
+    farmAddress: "",
+    gpsLat: "",
+    gpsLong: "",
+    farmSize: "",
+    mainCrops: "",
+    saccoMembership: "",
+    password: "",
+    confirmPassword: "",
+  });
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  const [errors, setErrors] = useState<Errors>({});
+  const [position, setPosition] = useState<[number, number]>([0.0236, 37.9062]);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [tabValue, setTabValue] = useState(0);
 
-  const getValidAccessToken = async (): Promise<string | null> => {
-    let token = localStorage.getItem("access");
-    const refresh = localStorage.getItem("refresh");
-    if (!token && refresh) {
-      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setFormData({ ...formData, gpsLat: latitude.toFixed(6), gpsLong: longitude.toFixed(6) });
+          setPosition([latitude, longitude]);
+          setMapError(null);
+        },
+        () => setMapError("Unable to fetch location.")
+      );
+    } else setMapError("Geolocation not supported.");
+  };
+
+  const handleGeocodeAddress = async () => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.farmAddress)}`);
+      const data = await res.json();
+      if (data[0]) {
+        setFormData({ ...formData, gpsLat: data[0].lat, gpsLong: data[0].lon });
+        setPosition([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        setMapError(null);
+      } else setMapError("Address not found.");
+    } catch {
+      setMapError("Error fetching address.");
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const validate = () => {
+    const newErrors: Errors = {};
+    if (!formData.fullName) newErrors.fullName = "Full Name required";
+    if (!formData.nationalId) newErrors.nationalId = "National ID required";
+    if (!formData.phone) newErrors.phone = "Phone required";
+    if (!formData.email) newErrors.email = "Email required";
+    if (!formData.farmAddress) newErrors.farmAddress = "Farm Address required";
+    if (!formData.gpsLat || !formData.gpsLong) newErrors.gps = "Farm location required";
+    if (!formData.password) newErrors.password = "Password required";
+    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh }),
+        body: JSON.stringify(formData),
       });
-      if (!refreshRes.ok) return null;
-      const refreshData = await refreshRes.json();
-      token = refreshData.access;
-      localStorage.setItem("access", token ?? "");
-    }
-    return token;
-  };
-
-  const fetchProducts = async () => {
-    setError(null);
-    const token = await getValidAccessToken();
-    if (!token) {
-      setError("Session expired. Please log in again.");
-      return;
-    }
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        setError(errData.detail || "Failed to fetch products.");
-        return;
-      }
-
-      const data: Product[] = await res.json();
-      setProducts(data);
-
-      // Pre-fetch farmer details for each product
-      data.forEach((product) => fetchFarmerDetails(product.farmer.email));
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load products. Please try again.");
-    }
-  };
-
-  const fetchFarmerDetails = async (email: string) => {
-    if (farmerDetails[email] || loadingFarmers[email]) return;
-
-    setLoadingFarmers((prev) => ({ ...prev, [email]: true }));
-    const token = await getValidAccessToken();
-    if (!token) return;
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${email}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch farmer details");
-      const data: Farmer = await res.json();
-      setFarmerDetails((prev) => ({ ...prev, [email]: data }));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingFarmers((prev) => ({ ...prev, [email]: false }));
-    }
-  };
-
-  const fetchProductStages = async (product: Product) => {
-    setLoadingStages(true);
-    const token = await getValidAccessToken();
-    if (!token) return;
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const stages = await res.json();
-      setSelectedProduct({ ...product, stages });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingStages(false);
-    }
-  };
-
-  const handleAction = async (product: Product, action: "approve" | "reject") => {
-    const token = await getValidAccessToken();
-    if (!token) return;
-
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action, review }),
-        }
-      );
-
-      if (!res.ok) {
-        const err = await res.json();
-        setError(err.detail || "Failed to process action.");
-        return;
-      }
 
       const data = await res.json();
-      setProducts((prev) => prev.map((p) => (p.uid === data.uid ? data : p)));
-      setSelectedProduct(null);
-      setReview("");
-    } catch (err) {
+
+      if (!res.ok) {
+        alert(data.error || "Registration failed");
+        return;
+      }
+
+      // Success message from backend (already registered on Hardhat)
+      alert(`Registration successful! Blockchain tx: ${data.tx_hash}`);
+    } catch (err: any) {
       console.error(err);
-      setError("Something went wrong. Try again.");
+      alert(err.message || "Unknown error");
     }
   };
 
-  const fadeInUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
-  };
+  useEffect(() => {
+    const timeout = setTimeout(() => setMapLoading(false), 1000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   return (
-    <Box sx={{ background: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ background: "linear-gradient(135deg, #1a3c34 0%, #2f855a 100%)", color: "#fff", minHeight: "100vh" }}>
       <TopNavBar />
-      <Container maxWidth="xl" sx={{ py: 6, flexGrow: 1 }}>
-        <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
-          <Typography variant="h4" fontWeight="800" sx={{ color: "#1e3a2f", mb: 2 }}>
-            Sacco Admin Dashboard
-          </Typography>
-          {error && <Typography color="error">{error}</Typography>}
-          <TableContainer component={Paper} sx={{ borderRadius: 3, boxShadow: 3 }}>
-            <Table stickyHeader>
-              <TableHead>
-                <TableRow>
-                  {[
-                    "Title",
-                    "Variety",
-                    "Farmer Name",
-                    "Email",
-                    "Phone",
-                    "Farm Address",
-                    "Latitude",
-                    "Longitude",
-                    "Quantity",
-                    "Acres",
-                    "Status",
-                    "Actions",
-                  ].map((header) => (
-                    <TableCell key={header} sx={{ fontWeight: 700 }}>
-                      {header}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {products.map((product) => {
-                  const farmer = farmerDetails[product.farmer.email];
-                  return (
-                    <TableRow key={product.uid} hover>
-                      <TableCell>{product.title}</TableCell>
-                      <TableCell>{product.variety}</TableCell>
-                      <TableCell>{farmer?.fullName || "Loading..."}</TableCell>
-                      <TableCell>{product.farmer.email}</TableCell>
-                      <TableCell>{farmer?.phone || "Loading..."}</TableCell>
-                      <TableCell>{farmer?.farmAddress || "Loading..."}</TableCell>
-                      <TableCell>{farmer?.gpsLat || "Loading..."}</TableCell>
-                      <TableCell>{farmer?.gpsLong || "Loading..."}</TableCell>
-                      <TableCell>{product.quantity}</TableCell>
-                      <TableCell>{product.acres}</TableCell>
-                      <TableCell>{product.status}</TableCell>
-                      <TableCell>
-                        {product.status === "Pending" && (
-                          <Button variant="outlined" size="small" onClick={() => fetchProductStages(product)}>
-                            Review
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </motion.div>
-
-        {/* Review Dialog */}
-        <Dialog open={!!selectedProduct} onClose={() => setSelectedProduct(null)} fullWidth maxWidth="sm">
-          <DialogTitle>Review Product: {selectedProduct?.title}</DialogTitle>
-          <DialogContent>
-            {loadingStages ? (
-              <CircularProgress />
-            ) : (
-              <>
-                {selectedProduct?.stages?.length ? (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Stage</TableCell>
-                        <TableCell>Quantity</TableCell>
-                        <TableCell>Location</TableCell>
-                        <TableCell>Scanned QR</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {selectedProduct?.stages?.map((stage) => (
-                        <TableRow key={stage.id}>
-                          <TableCell>{stage.stage_name}</TableCell>
-                          <TableCell>{stage.quantity}</TableCell>
-                          <TableCell>{stage.location}</TableCell>
-                          <TableCell>{stage.scanned_qr ? "Yes" : "No"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Typography>No stages recorded yet.</Typography>
+      <Container maxWidth="lg" sx={{ py: 8 }}>
+        <Typography variant="h4" fontWeight="600" textAlign="center" gutterBottom>Farmer Registration - FairTrace</Typography>
+        <Box sx={{ background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", border: "1px solid #c4d8c9", overflow: "hidden" }}>
+          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} centered>
+            <Tab label="Personal Info" />
+            <Tab label="Farm Details" />
+            <Tab label="Account Setup" />
+          </Tabs>
+          <Box component="form" onSubmit={handleSubmit}>
+            <TabPanel value={tabValue} index={0}>
+              <TextField label="Full Name" name="fullName" value={formData.fullName} onChange={handleChange} fullWidth required error={!!errors.fullName} helperText={errors.fullName} sx={{ mb: 2 }} />
+              <TextField label="National ID" name="nationalId" value={formData.nationalId} onChange={handleChange} fullWidth required error={!!errors.nationalId} helperText={errors.nationalId} sx={{ mb: 2 }} />
+              <TextField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} fullWidth required error={!!errors.phone} helperText={errors.phone} sx={{ mb: 2 }} />
+              <TextField label="Email" name="email" value={formData.email} onChange={handleChange} fullWidth required error={!!errors.email} helperText={errors.email} sx={{ mb: 2 }} />
+            </TabPanel>
+            <TabPanel value={tabValue} index={1}>
+              <TextField label="Farm Address" name="farmAddress" value={formData.farmAddress} onChange={handleChange} fullWidth required error={!!errors.farmAddress} helperText={errors.farmAddress} sx={{ mb: 2 }} />
+              <Box sx={{ height: "300px", mb: 2 }}>
+                {mapLoading ? <CircularProgress /> : (
+                  <MapContainer center={position} zoom={13} style={{ height: "100%", width: "100%" }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <LocationMarker setPosition={setPosition} />
+                    {formData.gpsLat && formData.gpsLong && <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />}
+                  </MapContainer>
                 )}
-
-                <TextField
-                  label="Admin Review"
-                  multiline
-                  rows={3}
-                  value={review}
-                  onChange={(e) => setReview(e.target.value)}
-                  fullWidth
-                  sx={{ mt: 2 }}
-                />
-
-                <Box sx={{ display: "flex", gap: 2, mt: 2, justifyContent: "flex-end" }}>
-                  <Button variant="contained" color="success" onClick={() => handleAction(selectedProduct!, "approve")}>
-                    Approve
-                  </Button>
-                  <Button variant="contained" color="error" onClick={() => handleAction(selectedProduct!, "reject")}>
-                    Reject
-                  </Button>
-                </Box>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+              </Box>
+              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <Button variant="outlined" onClick={handleGetLocation}>Use Current Location</Button>
+                <Button variant="outlined" onClick={handleGeocodeAddress}>Find From Address</Button>
+              </Box>
+              <TextField label="GPS Latitude" name="gpsLat" value={formData.gpsLat} onChange={handleChange} sx={{ mb: 2 }} error={!!errors.gps} helperText={errors.gps} />
+              <TextField label="GPS Longitude" name="gpsLong" value={formData.gpsLong} onChange={handleChange} sx={{ mb: 2 }} error={!!errors.gps} helperText={errors.gps} />
+              <TextField label="Farm Size (acres)" name="farmSize" type="number" value={formData.farmSize} onChange={handleChange} sx={{ mb: 2 }} />
+              <TextField label="Main Crops/Livestock" name="mainCrops" value={formData.mainCrops} onChange={handleChange} sx={{ mb: 2 }} />
+            </TabPanel>
+            <TabPanel value={tabValue} index={2}>
+              <TextField label="Password" name="password" type="password" value={formData.password} onChange={handleChange} fullWidth required error={!!errors.password} helperText={errors.password} sx={{ mb: 2 }} />
+              <TextField label="Confirm Password" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} fullWidth required error={!!errors.confirmPassword} helperText={errors.confirmPassword} sx={{ mb: 2 }} />
+            </TabPanel>
+            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+              <Button type="submit" variant="contained" size="large" sx={{ background: "#2f855a", color: "#fff", "&:hover": { background: "#276749" } }}>Register</Button>
+            </Box>
+          </Box>
+        </Box>
       </Container>
       <Footer />
     </Box>

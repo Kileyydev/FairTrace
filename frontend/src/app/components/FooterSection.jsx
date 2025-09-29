@@ -6,7 +6,7 @@ import { Facebook, Twitter, LinkedIn, Instagram } from "@mui/icons-material";
 
 export default function Footer() {
   return (
-    <Box sx={{ bgcolor: "#1a3c34", color: "#d4e4d9", py: 1.2 }}>
+    <Box sx={{ bgcolor: "#1a3c34", color: "#d4e4d9", py: 1.5}}>
       <Container maxWidth="lg">
         {/* Branding/Logo Placeholder */}
         <Box sx={{ textAlign: "center", mb: 3 }}>
@@ -40,7 +40,7 @@ export default function Footer() {
               justifyContent: { xs: "center", sm: "flex-start" },
             }}
           >
-            {["Home", "About", "Features", "Contact", "FAQ", "Blog"].map((text) => (
+            {["Home", "About", "Contact"].map((text) => (
               <Link
                 key={text}
                 href={`#${text.toLowerCase()}`}
@@ -98,39 +98,6 @@ export default function Footer() {
             mb: 3,
           }}
         >
-          <Typography variant="body1" fontWeight="600" sx={{ color: "#d4e4d9" }}>
-            Subscribe to Our Newsletter
-          </Typography>
-          <TextField
-            variant="outlined"
-            placeholder="Enter your email"
-            size="small"
-            sx={{
-              bgcolor: "#ffffff",
-              borderRadius: "8px",
-              width: { xs: "100%", sm: "200px" },
-              input: { color: "#1a3c34" },
-              fieldset: { borderColor: "#d4e4d9" },
-              "&:hover fieldset": { borderColor: "#2f855a" },
-            }}
-          />
-          <Button
-            variant="contained"
-            sx={{
-              bgcolor: "#2f855a",
-              color: "#ffffff",
-              borderRadius: "8px",
-              px: 3,
-              py: 1,
-              fontWeight: "600",
-              "&:hover": {
-                bgcolor: "#276749",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              },
-            }}
-          >
-            Subscribe
-          </Button>
         </Box>
 
         {/* Copyright */}
