@@ -1,13 +1,38 @@
 "use client";
-
 import React, { useState, useEffect } from "react";
-import { Box, Container, Typography, TextField, Button, Tabs, Tab, CircularProgress } from "@mui/material";
+import {
+  Box,
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Tabs,
+  Tab,
+  CircularProgress,
+  Alert,
+  Snackbar,
+  IconButton,
+  Stepper,
+  Step,
+  StepLabel,
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import dynamic from "next/dynamic";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useMapEvents, MapContainerProps } from "react-leaflet";
+import { useMapEvents } from "react-leaflet";
 import TopNavBar from "../components/TopNavBar";
 import Footer from "../components/FooterSection";
+
+// Leaflet icon fix
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
 const customIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -19,7 +44,7 @@ const customIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false }) as React.ComponentType<MapContainerProps>;
+const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 
@@ -59,21 +84,18 @@ function LocationMarker({ setPosition }: { setPosition: React.Dispatch<React.Set
   return null;
 }
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+function TabPanel({ children, value, index }: { children: React.ReactNode; value: number; index: number }) {
   return (
-    <div role="tabpanel" hidden={value !== index} {...other}>
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    <div role="tabpanel" hidden={value !== index}>
+      {value === index && <Box sx={{ pt: 4, pb: 2 }}>{children}</Box>}
     </div>
   );
 }
 
+const steps = ["Personal Info", "Farm Details", "Account Setup"];
+
 export default function RegisterPage() {
+  const [activeStep, setActiveStep] = useState(0);
   const [formData, setFormData] = useState<FormData>({
     fullName: "",
     nationalId: "",
@@ -88,12 +110,17 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
   });
-
   const [errors, setErrors] = useState<Errors>({});
   const [position, setPosition] = useState<[number, number]>([0.0236, 37.9062]);
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState<string | null>(null);
-  const [tabValue, setTabValue] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Success Snackbar
+  const [snackOpen, setSnackOpen] = useState(false);
+  const [txHash, setTxHash] = useState<string>("");
+
+  const handleCloseSnack = () => setSnackOpen(false);
 
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -127,31 +154,47 @@ export default function RegisterPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const validate = () => {
+  const validateStep = (step: number): boolean => {
     const newErrors: Errors = {};
-    if (!formData.fullName) newErrors.fullName = "Full Name required";
-    if (!formData.nationalId) newErrors.nationalId = "National ID required";
-    if (!formData.phone) newErrors.phone = "Phone required";
-    if (!formData.email) newErrors.email = "Email required";
-    if (!formData.farmAddress) newErrors.farmAddress = "Farm Address required";
-    if (!formData.gpsLat || !formData.gpsLong) newErrors.gps = "Farm location required";
-    if (!formData.password) newErrors.password = "Password required";
-    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+    if (step === 0) {
+      if (!formData.fullName) newErrors.fullName = "Full Name required";
+      if (!formData.nationalId) newErrors.nationalId = "National ID required";
+      if (!formData.phone) newErrors.phone = "Phone required";
+      if (!formData.email) newErrors.email = "Email required";
+    }
+    if (step === 1) {
+      if (!formData.farmAddress) newErrors.farmAddress = "Farm Address required";
+      if (!formData.gpsLat || !formData.gpsLong) newErrors.gps = "Farm location required";
+    }
+    if (step === 2) {
+      if (!formData.password) newErrors.password = "Password required";
+      if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleNext = () => {
+    if (validateStep(activeStep)) {
+      setActiveStep((prev) => prev + 1);
+    }
+  };
+
+  const handleBack = () => {
+    setActiveStep((prev) => prev - 1);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validateStep(2)) return;
 
+    setSubmitting(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
@@ -159,68 +202,202 @@ export default function RegisterPage() {
         return;
       }
 
-      // Success message from backend (already registered on Hardhat)
-      alert(`Registration successful! Blockchain tx: ${data.tx_hash}`);
+      // Success!
+      setTxHash(data.tx_hash || "N/A");
+      setSnackOpen(true);
+      // Optionally reset form
+      setFormData({
+        fullName: "",
+        nationalId: "",
+        phone: "",
+        email: "",
+        farmAddress: "",
+        gpsLat: "",
+        gpsLong: "",
+        farmSize: "",
+        mainCrops: "",
+        saccoMembership: "",
+        password: "",
+        confirmPassword: "",
+      });
+      setActiveStep(0);
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Unknown error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   useEffect(() => {
-    const timeout = setTimeout(() => setMapLoading(false), 1000);
+    const timeout = setTimeout(() => setMapLoading(false), 800);
     return () => clearTimeout(timeout);
   }, []);
 
   return (
-    <Box sx={{ background: "linear-gradient(135deg, #1a3c34 0%, #2f855a 100%)", color: "#fff", minHeight: "100vh" }}>
+    <Box sx={{ bgcolor: "#f5f7f5", minHeight: "100vh", color: "#333" }}>
       <TopNavBar />
-      <Container maxWidth="lg" sx={{ py: 8 }}>
-        <Typography variant="h4" fontWeight="600" textAlign="center" gutterBottom>Farmer Registration - FairTrace</Typography>
-        <Box sx={{ background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", border: "1px solid #c4d8c9", overflow: "hidden" }}>
-          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} centered>
-            <Tab label="Personal Info" />
-            <Tab label="Farm Details" />
-            <Tab label="Account Setup" />
-          </Tabs>
-          <Box component="form" onSubmit={handleSubmit}>
-            <TabPanel value={tabValue} index={0}>
-              <TextField label="Full Name" name="fullName" value={formData.fullName} onChange={handleChange} fullWidth required error={!!errors.fullName} helperText={errors.fullName} sx={{ mb: 2 }} />
-              <TextField label="National ID" name="nationalId" value={formData.nationalId} onChange={handleChange} fullWidth required error={!!errors.nationalId} helperText={errors.nationalId} sx={{ mb: 2 }} />
-              <TextField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} fullWidth required error={!!errors.phone} helperText={errors.phone} sx={{ mb: 2 }} />
-              <TextField label="Email" name="email" value={formData.email} onChange={handleChange} fullWidth required error={!!errors.email} helperText={errors.email} sx={{ mb: 2 }} />
+      <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 } }}>
+        <Typography
+          variant="h4"
+          fontWeight="700"
+          textAlign="center"
+          gutterBottom
+          sx={{ color: "#1a3c34" }}
+        >
+          Farmer Registration – FairTrace
+        </Typography>
+
+        <Box
+          sx={{
+            bgcolor: "#fff",
+            borderRadius: 3,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+            overflow: "hidden",
+          }}
+        >
+          <Stepper activeStep={activeStep} alternativeLabel sx={{ pt: 4, pb: 2 }}>
+            {steps.map((label) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+
+          <Box component="form" onSubmit={handleSubmit} sx={{ px: { xs: 3, md: 6 }, pb: 4 }}>
+            {/* Step 0: Personal Info */}
+            <TabPanel value={activeStep} index={0}>
+              <TextField label="Full Name" name="fullName" value={formData.fullName} onChange={handleChange} fullWidth required error={!!errors.fullName} helperText={errors.fullName} sx={{ mb: 3 }} />
+              <TextField label="National ID" name="nationalId" value={formData.nationalId} onChange={handleChange} fullWidth required error={!!errors.nationalId} helperText={errors.nationalId} sx={{ mb: 3 }} />
+              <TextField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} fullWidth required error={!!errors.phone} helperText={errors.phone} sx={{ mb: 3 }} />
+              <TextField label="Email" name="email" type="email" value={formData.email} onChange={handleChange} fullWidth required error={!!errors.email} helperText={errors.email} sx={{ mb: 3 }} />
             </TabPanel>
-            <TabPanel value={tabValue} index={1}>
-              <TextField label="Farm Address" name="farmAddress" value={formData.farmAddress} onChange={handleChange} fullWidth required error={!!errors.farmAddress} helperText={errors.farmAddress} sx={{ mb: 2 }} />
-              <Box sx={{ height: "300px", mb: 2 }}>
-                {mapLoading ? <CircularProgress /> : (
-                  <MapContainer center={position} zoom={13} style={{ height: "100%", width: "100%" }}>
+
+            {/* Step 1: Farm Details */}
+            <TabPanel value={activeStep} index={1}>
+              <TextField label="Farm Address" name="farmAddress" value={formData.farmAddress} onChange={handleChange} fullWidth required error={!!errors.farmAddress} helperText={errors.farmAddress} sx={{ mb: 3 }} />
+
+              <Box sx={{ height: 320, borderRadius: 2, overflow: "hidden", mb: 3, border: "1px solid #e0e0e0" }}>
+                {mapLoading ? (
+                  <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <MapContainer center={position} zoom={14} style={{ height: "100%", width: "100%" }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     <LocationMarker setPosition={setPosition} />
-                    {formData.gpsLat && formData.gpsLong && <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />}
+                    {formData.gpsLat && formData.gpsLong && (
+                      <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />
+                    )}
                   </MapContainer>
                 )}
               </Box>
-              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-                <Button variant="outlined" onClick={handleGetLocation}>Use Current Location</Button>
-                <Button variant="outlined" onClick={handleGeocodeAddress}>Find From Address</Button>
+
+              {mapError && <Alert severity="error" sx={{ mb: 2 }}>{mapError}</Alert>}
+
+              <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
+                <Button variant="outlined" color="success" onClick={handleGetLocation}>
+                  Use Current Location
+                </Button>
+                <Button variant="outlined" color="success" onClick={handleGeocodeAddress}>
+                  Find From Address
+                </Button>
               </Box>
-              <TextField label="GPS Latitude" name="gpsLat" value={formData.gpsLat} onChange={handleChange} sx={{ mb: 2 }} error={!!errors.gps} helperText={errors.gps} />
-              <TextField label="GPS Longitude" name="gpsLong" value={formData.gpsLong} onChange={handleChange} sx={{ mb: 2 }} error={!!errors.gps} helperText={errors.gps} />
-              <TextField label="Farm Size (acres)" name="farmSize" type="number" value={formData.farmSize} onChange={handleChange} sx={{ mb: 2 }} />
-              <TextField label="Main Crops/Livestock" name="mainCrops" value={formData.mainCrops} onChange={handleChange} sx={{ mb: 2 }} />
+
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <TextField label="GPS Latitude" name="gpsLat" value={formData.gpsLat} onChange={handleChange} sx={{ flex: 1 }} error={!!errors.gps} helperText={errors.gps || "Click map or use buttons"} />
+                <TextField label="GPS Longitude" name="gpsLong" value={formData.gpsLong} onChange={handleChange} sx={{ flex: 1 }} error={!!errors.gps} />
+              </Box>
+
+              <TextField label="Farm Size (acres)" name="farmSize" type="number" value={formData.farmSize} onChange={handleChange} fullWidth sx={{ mt: 3, mb: 3 }} />
+              <TextField label="Main Crops / Livestock" name="mainCrops" value={formData.mainCrops} onChange={handleChange} fullWidth sx={{ mb: 3 }} />
             </TabPanel>
-            <TabPanel value={tabValue} index={2}>
-              <TextField label="Password" name="password" type="password" value={formData.password} onChange={handleChange} fullWidth required error={!!errors.password} helperText={errors.password} sx={{ mb: 2 }} />
-              <TextField label="Confirm Password" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} fullWidth required error={!!errors.confirmPassword} helperText={errors.confirmPassword} sx={{ mb: 2 }} />
+
+            {/* Step 2: Account Setup */}
+            <TabPanel value={activeStep} index={2}>
+              <TextField
+                label="Password"
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleChange}
+                fullWidth
+                required
+                error={!!errors.password}
+                helperText={errors.password}
+                sx={{ mb: 3 }}
+              />
+              <TextField
+                label="Confirm Password"
+                name="confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                fullWidth
+                required
+                error={!!errors.confirmPassword}
+                helperText={errors.confirmPassword}
+                sx={{ mb: 3 }}
+              />
             </TabPanel>
-            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-              <Button type="submit" variant="contained" size="large" sx={{ background: "#2f855a", color: "#fff", "&:hover": { background: "#276749" } }}>Register</Button>
+
+            {/* Navigation Buttons */}
+            <Box sx={{ display: "flex", justifyContent: "space-between", mt: 4 }}>
+              <Button disabled={activeStep === 0} variant="outlined" startIcon={<ArrowBackIcon />} onClick={handleBack}>
+                Back
+              </Button>
+
+              {activeStep === steps.length - 1 ? (
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  disabled={submitting}
+                  sx={{
+                    bgcolor: "#1a3c34",
+                    "&:hover": { bgcolor: "#0f241d" },
+                  }}
+                >
+                  {submitting ? <CircularProgress size={24} color="inherit" /> : "Complete Registration"}
+                </Button>
+              ) : (
+                <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleNext} sx={{ bgcolor: "#2f855a", "&:hover": { bgcolor: "#276749" } }}>
+                  Next
+                </Button>
+              )}
             </Box>
           </Box>
         </Box>
       </Container>
+
       <Footer />
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={snackOpen}
+        autoHideDuration={12000}
+        onClose={handleCloseSnack}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          severity="success"
+          action={
+            <IconButton size="small" aria-label="close" color="inherit" onClick={handleCloseSnack}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          }
+          sx={{ width: "100%", fontSize: "1rem" }}
+        >
+          <strong>Registration Successful!</strong>
+          <br />
+          Your data is now on the blockchain.
+          <br />
+          Transaction Hash:{" "}
+          <Box component="span" sx={{ fontFamily: "Monospace", wordBreak: "break-all", fontSize: "0.85rem" }}>
+            {txHash || "N/A"}
+          </Box>
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

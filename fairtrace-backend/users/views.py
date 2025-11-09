@@ -22,9 +22,6 @@ from django.shortcuts import get_object_or_404
 from blockchain.tasks import register_farmer_onchain
 
 
-# ----------------------------
-# Registration
-# ----------------------------
 class RegisterAPIView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -85,9 +82,6 @@ class RegisterAPIView(APIView):
         )
 
 
-# ----------------------------
-# Login (Send OTP after password check)
-# ----------------------------
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
