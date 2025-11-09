@@ -19,7 +19,6 @@ import {
 } from "@mui/material";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
-import { farmerRegistry, productRegistry } from "@/utils/blockchain";
 
 interface BlockData {
   number: number;
@@ -30,10 +29,10 @@ interface BlockData {
 }
 
 interface TransactionData {
-  farmerName?: string;
-  productName?: string;
   txHash: string;
   blockNumber: number;
+  from: string;
+  to: string;
 }
 
 interface TabPanelProps {
@@ -76,64 +75,36 @@ export default function HardhatExplorer() {
         setIsLoading(true);
         const latestBlockNumber = await provider.getBlockNumber();
 
-        // Fetch latest 10 blocks
         const recentBlocks = await Promise.all(
           Array.from({ length: Math.min(10, latestBlockNumber + 1) }, (_, i) =>
             provider.getBlock(latestBlockNumber - i)
           )
         );
 
-        // Format blocks
         const formattedBlocks: BlockData[] = recentBlocks
           .filter((b): b is ethers.Block => !!b)
           .map((b) => ({
             number: b.number,
             hash: b.hash ?? "",
             miner: b.miner,
-            timestamp: new Date(b.timestamp * 1000).toLocaleTimeString(),
+            timestamp: new Date(b.timestamp * 1000).toLocaleString(),
             txCount: b.transactions.length,
           }));
 
         setBlocks(formattedBlocks);
         latestBlockRef.current = latestBlockNumber;
 
-        // Fetch transactions
         const fetchedTxs: TransactionData[] = [];
-
         for (const block of recentBlocks) {
           if (!block) continue;
           for (const txHash of block.transactions) {
             const tx = await provider.getTransaction(txHash);
-            if (!tx || !tx.to) continue;
-
-            let farmerName: string | undefined;
-            let productName: string | undefined;
-
-            try {
-              const toLower = tx.to.toLowerCase();
-
-              if (toLower === String(farmerRegistry.target).toLowerCase()) {
-                const decoded = farmerRegistry.interface.parseTransaction({
-                  data: tx.data,
-                  value: tx.value,
-                });
-                if (decoded?.args?.name) farmerName = decoded.args.name;
-              } else if (toLower === String(productRegistry.target).toLowerCase()) {
-                const decoded = productRegistry.interface.parseTransaction({
-                  data: tx.data,
-                  value: tx.value,
-                });
-                if (decoded?.args?.productName) productName = decoded.args.productName;
-              }
-            } catch {
-              // Ignore errors
-            }
-
+            if (!tx) continue;
             fetchedTxs.push({
               txHash: tx.hash,
               blockNumber: tx.blockNumber!,
-              farmerName,
-              productName,
+              from: tx.from,
+              to: tx.to ?? "Contract Creation",
             });
           }
         }
@@ -148,7 +119,6 @@ export default function HardhatExplorer() {
 
     fetchData();
 
-    // Listen for new blocks
     const handleNewBlock = async (blockNumber: number) => {
       if (blockNumber > latestBlockRef.current) {
         await fetchData();
@@ -162,52 +132,140 @@ export default function HardhatExplorer() {
     };
   }, []);
 
-  return (
-    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", backgroundColor: "#f5f5f5" }}>
-      <TopNavBar />
-      <Container maxWidth="xl" sx={{ flexGrow: 1, py: 4 }}>
-        <Typography variant="h4" fontWeight="bold" sx={{ mb: 3, textAlign: "center" }}>
-          FairTrace Explorer
-        </Typography>
+  const shorten = (addr: string) =>
+    addr.length > 12 ? `${addr.slice(0, 8)}...${addr.slice(-6)}` : addr;
 
-        <Paper sx={{ borderRadius: 2, boxShadow: 3 }}>
-          <Tabs value={tabIndex} onChange={handleTabChange} textColor="primary" indicatorColor="primary" centered>
-            <Tab label="Blocks" />
-            <Tab label="Transactions" />
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "linear-gradient(to bottom, #f8fff8, #e8f5e9)",
+      }}
+    >
+      <TopNavBar />
+      <Container maxWidth="xl" sx={{ flexGrow: 1, py: { xs: 3, md: 6 } }}>
+        <Box sx={{ textAlign: "center", mb: 5 }}>
+          <Typography
+            variant="h3"
+            fontWeight="bold"
+            sx={{
+              background: "linear-gradient(90deg, #2e7d32, #4caf50)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              letterSpacing: "0.5px",
+            }}
+          >
+            FairTrace Blockchain Explorer
+          </Typography>
+          <Typography variant="subtitle1" color="gray" sx={{ mt: 1 }}>
+            Real-time view of your local Hardhat network
+          </Typography>
+        </Box>
+
+        <Paper
+          elevation={8}
+          sx={{
+            borderRadius: 3,
+            overflow: "hidden",
+            background: "#ffffff",
+            border: "1px solid #c8e6c9",
+          }}
+        >
+          <Tabs
+            value={tabIndex}
+            onChange={handleTabChange}
+            centered
+            sx={{
+              background: "linear-gradient(90deg, #2e7d32, #4caf50)",
+              "& .MuiTab-root": {
+                color: "#e8f5e9",
+                fontWeight: 600,
+                textTransform: "none",
+                fontSize: "1.1rem",
+              },
+              "& .Mui-selected": {
+                color: "#ffffff !important",
+              },
+              "& .MuiTabs-indicator": {
+                height: 4,
+                backgroundColor: "#c8e6c9",
+              },
+            }}
+          >
+            <Tab label="Latest Blocks" />
+            <Tab label="All Transactions" />
           </Tabs>
 
           {/* Blocks Tab */}
           <TabPanel value={tabIndex} index={0}>
             {isLoading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}>
-                <CircularProgress color="primary" size={60} />
+              <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                <CircularProgress size={64} thickness={5} sx={{ color: "#4caf50" }} />
               </Box>
             ) : (
-              <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 3 }}>
-                <Table>
-                  <TableHead sx={{ backgroundColor: "#2f7038ff" }}>
+              <TableContainer sx={{ maxHeight: "70vh" }}>
+                <Table stickyHeader>
+                  <TableHead>
                     <TableRow>
-                      <TableCell sx={{ color: "#fff", fontWeight: "bold" }}>Block #</TableCell>
-                      <TableCell sx={{ color: "#fff", fontWeight: "bold" }}>Hash</TableCell>
-                      <TableCell sx={{ color: "#fff", fontWeight: "bold" }}>Miner</TableCell>
-                      <TableCell sx={{ color: "#fff", fontWeight: "bold" }}>Timestamp</TableCell>
-                      <TableCell sx={{ color: "#fff", fontWeight: "bold" }}>Tx Count</TableCell>
+                      {["Block #", "Hash", "Miner", "Timestamp", "Tx Count"].map((header) => (
+                        <TableCell
+                          key={header}
+                          sx={{
+                            backgroundColor: "#2e7d32",
+                            color: "#ffffff",
+                            fontWeight: "bold",
+                            fontSize: "1rem",
+                            py: 2,
+                          }}
+                        >
+                          {header}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {blocks.map((b) => (
+                    {blocks.map((b, idx) => (
                       <TableRow
                         key={b.hash}
+                        hover
                         sx={{
-                          "&:nth-of-type(odd)": { backgroundColor: "#f1f8e9" },
-                          "&:nth-of-type(even)": { backgroundColor: "#e8f5e9" },
+                          backgroundColor: idx % 2 === 0 ? "#f1f8e9" : "#e8f5e9",
+                          transition: "all 0.2s",
+                          "&:hover": {
+                            backgroundColor: "#c8e6c9",
+                            transform: "translateY(-1px)",
+                            boxShadow: "0 4px 8px rgba(46, 125, 50, 0.15)",
+                          },
                         }}
                       >
-                        <TableCell>{b.number}</TableCell>
-                        <TableCell sx={{ fontSize: "0.8rem" }}>{b.hash}</TableCell>
-                        <TableCell>{b.miner}</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: "#2e7d32" }}>
+                          {b.number}
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {shorten(b.hash)}
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {shorten(b.miner)}
+                        </TableCell>
                         <TableCell>{b.timestamp}</TableCell>
-                        <TableCell>{b.txCount}</TableCell>
+                        <TableCell>
+                          <Box
+                            sx={{
+                              backgroundColor: "#4caf50",
+                              color: "white",
+                              borderRadius: 2,
+                              px: 1.5,
+                              py: 0.5,
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              display: "inline-block",
+                            }}
+                          >
+                            {b.txCount}
+                          </Box>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -219,43 +277,65 @@ export default function HardhatExplorer() {
           {/* Transactions Tab */}
           <TabPanel value={tabIndex} index={1}>
             {isLoading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}>
-                <CircularProgress color="primary" size={60} />
+              <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                <CircularProgress size={64} thickness={5} sx={{ color: "#4caf50" }} />
+              </Box>
+            ) : transactions.length === 0 ? (
+              <Box sx={{ textAlign: "center", py: 8 }}>
+                <Typography variant="h6" color="gray">
+                  No transactions found
+                </Typography>
               </Box>
             ) : (
-              <TableContainer component={Paper} sx={{ maxHeight: "60vh", borderRadius: 2, boxShadow: 3 }}>
+              <TableContainer sx={{ maxHeight: "70vh" }}>
                 <Table stickyHeader>
-                  <TableHead sx={{ backgroundColor: "#2e7d32" }}>
+                  <TableHead>
                     <TableRow>
-                      <TableCell sx={{ color: "#000", fontWeight: "bold" }}>Tx Hash</TableCell>
-                      <TableCell sx={{ color: "#000", fontWeight: "bold" }}>Block #</TableCell>
-                      <TableCell sx={{ color: "#000", fontWeight: "bold" }}>Farmer</TableCell>
-                      <TableCell sx={{ color: "#000", fontWeight: "bold" }}>Product</TableCell>
+                      {["Tx Hash", "Block #", "From", "To"].map((header) => (
+                        <TableCell
+                          key={header}
+                          sx={{
+                            backgroundColor: "#2e7d32",
+                            color: "#ffffff",
+                            fontWeight: "bold",
+                            fontSize: "1rem",
+                            py: 2,
+                          }}
+                        >
+                          {header}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {transactions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                          No transactions found
+                    {transactions.map((tx, idx) => (
+                      <TableRow
+                        key={tx.txHash}
+                        hover
+                        sx={{
+                          backgroundColor: idx % 2 === 0 ? "#e8f5e9" : "#c8e6c9",
+                          transition: "all 0.2s",
+                          "&:hover": {
+                            backgroundColor: "#a5d6a7",
+                            transform: "translateY(-1px)",
+                            boxShadow: "0 4px 10px rgba(46, 125, 50, 0.2)",
+                          },
+                        }}
+                      >
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {shorten(tx.txHash)}
+                        </TableCell>
+                        <TableCell sx={{ color: "#2e7d32", fontWeight: 600 }}>
+                          {tx.blockNumber}
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {shorten(tx.from)}
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {shorten(tx.to)}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      transactions.map((tx) => (
-                        <TableRow
-                          key={tx.txHash}
-                          sx={{
-                            "&:nth-of-type(odd)": { backgroundColor: "#e8f5e9" },
-                            "&:nth-of-type(even)": { backgroundColor: "#c8e6c9" },
-                          }}
-                        >
-                          <TableCell sx={{ fontSize: "0.8rem" }}>{tx.txHash}</TableCell>
-                          <TableCell>{tx.blockNumber}</TableCell>
-                          <TableCell>{tx.farmerName || "-"}</TableCell>
-                          <TableCell>{tx.productName || "-"}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
               </TableContainer>

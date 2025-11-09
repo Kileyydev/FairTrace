@@ -2,7 +2,7 @@
   "name": "blockchain",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "commonjs",   
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "compile": "hardhat compile",
@@ -13,12 +13,14 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-etherscan": "^3.1.8",
     "dotenv": "^17.2.2",
-    "ethers": "^6.15.0",
-    "hardhat": "^2.26.3",
+    "hardhat": "^2.27.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "ethers": "^5.8.0"
   }
 }

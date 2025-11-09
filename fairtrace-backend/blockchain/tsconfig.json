@@ -8,6 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "node16",
-    "outDir": "dist"
+    "typeRoots": ["./node_modules/@types", "./types"],  // ✅ Add your types folder
+    "outDir": "dist",
+    "types": ["node", "hardhat"]
   }
 }

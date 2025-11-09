@@ -3,39 +3,24 @@ Django settings for fairtrace_backend project.
 """
 
 from pathlib import Path
+import os
 from decouple import config
-import os
-import os
 from dotenv import load_dotenv
-from pathlib import Path
-import os
-from dotenv import load_dotenv
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
-
-
-# Load .env file
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Security
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-wlr*_cka80@lpy_rs+6ch1dzs^+#owk^72whk%3hgpz818*7z3')
-DEBUG = config('DEBUG', default=True, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# Load .env
+load_dotenv(BASE_DIR / ".env")
 
-# Installed apps
+# SECURITY
+SECRET_KEY = config('SECRET_KEY', default='changeme')
+DEBUG = config('DEBUG', default=True, cast=bool)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+
+# INSTALLED APPS
 INSTALLED_APPS = [
+    # Django core
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,7 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Third-party apps
+    # Third-party
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
@@ -56,32 +41,10 @@ INSTALLED_APPS = [
     'payments',
 ]
 
-# Web3 / contract settings
-SEPOLIA_RPC_URL = os.environ.get('SEPOLIA_RPC_URL')
-WEB3_PRIVATE_KEY = os.environ.get('WEB3_PRIVATE_KEY')  # relayer account (0x...)
-CONTRACT_ADDRESS = os.environ.get('CONTRACT_ADDRESS')
-CONTRACT_ABI_JSON = os.environ.get('CONTRACT_ABI_JSON')  # optional if not loading artifact file
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
-CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
-
-# settings.py
-USE_TZ = True
-TIME_ZONE = 'Africa/Nairobi'
-
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-PRODUCT_REGISTRY_ADDRESS = os.getenv("PRODUCT_REGISTRY_ADDRESS")
-WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "http://127.0.0.1:8545")
-
-
-
-# Middleware
+# MIDDLEWARE
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # Must be high up
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -92,6 +55,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'fairtrace_backend.urls'
 
+# TEMPLATES
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -109,59 +73,51 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'fairtrace_backend.wsgi.application'
 
-# Database
+# DATABASE
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': config('DB_NAME', default='fairtrace_db'),
         'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default='postgres'),
+        'PASSWORD': config('DB_PASSWORD', default=''),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
     }
 }
 
-# Password validators
+# PASSWORD VALIDATORS
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
-# Internationalization
+# INTERNATIONALIZATION
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Nairobi'
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# STATIC FILES
 STATIC_URL = 'static/'
 
-# Default primary key field type
+# DEFAULT AUTO FIELD
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Custom user model
+# CUSTOM USER MODEL
 AUTH_USER_MODEL = 'users.User'
 
-# Email configuration
-# settings.py
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'insaiderdash@gmail.com'
-EMAIL_HOST_PASSWORD = 'xpmj rzjo uxva xeel'
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+# EMAIL SETTINGS
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
 
-# Celery
+# CELERY
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 
 # DRF + JWT
@@ -171,11 +127,17 @@ REST_FRAMEWORK = {
     ),
 }
 
-# settings.py
-import os
-
-WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "http://127.0.0.1:8545")  
-
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
+# WEB3 / BLOCKCHAIN SETTINGS
+WEB3_PROVIDER = config('WEB3_PROVIDER', default='http://127.0.0.1:8545')  # Ganache
+CONTRACT_ADDRESS = config('CONTRACT_ADDRESS', default='0x0B306BF915C4d645ff596e518fAf3F9669b97016')
+PRODUCT_REGISTRY_ADDRESS = config('PRODUCT_REGISTRY_ADDRESS', default='0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1')
+CONTRACT_ABI_PATH = config('CONTRACT_ABI_PATH', default=str(BASE_DIR / "blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json"))
+ADMIN_WALLET_ADDRESS = config('ADMIN_WALLET_ADDRESS', default='')
+ADMIN_WALLET_PRIVATE_KEY = config('ADMIN_WALLET_PRIVATE_KEY', default='')
