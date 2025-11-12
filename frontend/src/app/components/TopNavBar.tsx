@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from "react";
@@ -18,7 +17,7 @@ import { motion } from "framer-motion";
 
 export default function TopNavBar() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Replace with real auth later
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Replace with real auth
   const router = useRouter();
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -30,8 +29,7 @@ export default function TopNavBar() {
   };
 
   const navigateTo = (item: string) => {
-    // Use localhost:3000 for Home, relative paths for others
-    const path = item === "Home" ? "http://localhost:3000" : "/" + item.toLowerCase();
+    const path = item === "Home" ? "/" : `/${item.toLowerCase()}`;
     router.push(path);
     handleMenuClose();
   };
@@ -51,65 +49,72 @@ export default function TopNavBar() {
     handleMenuClose();
   };
 
-  // Animation variants
+  // Subtle fade-in
   const fadeIn = {
-    hidden: { opacity: 0, y: -10 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+    hidden: { opacity: 0, y: -8 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
   };
 
   return (
     <motion.div initial="hidden" animate="visible" variants={fadeIn}>
       <AppBar
         position="fixed"
+        elevation={0}
         sx={{
-          background: "linear-gradient(90deg, rgba(30, 58, 47, 0.95) 0%, rgba(47, 133, 90, 0.95) 100%)",
-          backdropFilter: "blur(12px)",
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-          py: 0.5,
+          background: "rgba(20, 35, 28, 0.72)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
+          height: 56,
+          justifyContent: "center",
+          zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
         <Toolbar
           sx={{
+            minHeight: "56px !important",
+            height: 56,
+            px: { xs: 2, md: 3 },
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            minHeight: { xs: 56, md: 64 },
           }}
         >
-          {/* Logo / Brand Name */}
+          {/* Brand */}
           <Typography
             variant="h6"
+            onClick={() => navigateTo("Home")}
             sx={{
-              fontWeight: "800",
-              fontSize: { xs: "1.2rem", md: "1.5rem" },
-              letterSpacing: "-0.02em",
+              fontWeight: 800,
+              fontSize: { xs: "1.15rem", md: "1.35rem" },
+              letterSpacing: "-0.5px",
               cursor: "pointer",
-              background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)",
+              background: "linear-gradient(90deg, #c8e6d3 0%, #ffffff 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
+              userSelect: "none",
             }}
-            onClick={() => navigateTo("Home")}
           >
             FairTrace
           </Typography>
 
           {/* Desktop Navigation */}
-          <Box sx={{ display: { xs: "none", md: "flex" }, gap: 1.5, alignItems: "center" }}>
+          <Box sx={{ display: { xs: "none", md: "flex" }, gap: 1, alignItems: "center" }}>
             {["Home", "About", "Contact"].map((item) => (
               <Button
                 key={item}
-                color="inherit"
                 onClick={() => navigateTo(item)}
                 sx={{
-                  fontWeight: "600",
-                  fontSize: "0.9rem",
-                  textTransform: "none",
                   color: "#e0f2e9",
-                  px: 2,
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  textTransform: "none",
+                  px: 1.5,
                   py: 0.5,
+                  borderRadius: 0,
+                  transition: "all 0.2s ease",
                   "&:hover": {
-                    background: "rgba(255, 255, 255, 0.1)",
+                    background: "rgba(255, 255, 255, 0.12)",
                     color: "#ffffff",
                   },
                 }}
@@ -117,44 +122,47 @@ export default function TopNavBar() {
                 {item}
               </Button>
             ))}
+
             {!isAuthenticated ? (
               <>
                 <Button
-                  variant="outlined"
-                  color="inherit"
                   onClick={handleLoginClick}
                   sx={{
-                    fontWeight: "600",
-                    fontSize: "0.9rem",
-                    textTransform: "none",
-                    borderColor: "#e0f2e9",
                     color: "#e0f2e9",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    textTransform: "none",
                     px: 2,
                     py: 0.5,
-                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid rgba(224, 242, 233, 0.4)",
+                    borderRadius: 0,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    transition: "all 0.2s ease",
                     "&:hover": {
-                      background: "#2f855a",
-                      color: "#ffffff",
+                      background: "rgba(47, 133, 90, 0.3)",
                       borderColor: "#2f855a",
+                      color: "#ffffff",
                     },
                   }}
                 >
                   Login
                 </Button>
                 <Button
-                  variant="contained"
                   onClick={handleRegisterClick}
                   sx={{
-                    fontWeight: "700",
-                    fontSize: "0.9rem",
-                    textTransform: "none",
                     background: "linear-gradient(45deg, #2f855a 0%, #4caf50 100%)",
                     color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "0.875rem",
+                    textTransform: "none",
                     px: 2.5,
                     py: 0.5,
+                    borderRadius: 0,
+                    boxShadow: "0 2px 8px rgba(47, 133, 90, 0.3)",
+                    transition: "all 0.2s ease",
                     "&:hover": {
                       background: "linear-gradient(45deg, #276749 0%, #388e3c 100%)",
-                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                      boxShadow: "0 4px 12px rgba(47, 133, 90, 0.4)",
                     },
                   }}
                 >
@@ -163,19 +171,21 @@ export default function TopNavBar() {
               </>
             ) : (
               <Button
-                variant="contained"
                 onClick={handleLogoutClick}
                 sx={{
-                  fontWeight: "700",
-                  fontSize: "0.9rem",
-                  textTransform: "none",
-                  background: "linear-gradient(45deg, #d32f2f 0%, #b71c1c 100%)",
+                  background: "linear-gradient(45deg, #d32f2f 0%, #c62828 100%)",
                   color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "0.875rem",
+                  textTransform: "none",
                   px: 2.5,
                   py: 0.5,
+                  borderRadius: 0,
+                  boxShadow: "0 2px 8px rgba(211, 47, 47, 0.3)",
+                  transition: "all 0.2s ease",
                   "&:hover": {
                     background: "linear-gradient(45deg, #b71c1c 0%, #9a0007 100%)",
-                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                    boxShadow: "0 4px 12px rgba(183, 28, 28, 0.4)",
                   },
                 }}
               >
@@ -186,19 +196,26 @@ export default function TopNavBar() {
 
           {/* Mobile Menu */}
           <Box sx={{ display: { xs: "flex", md: "none" } }}>
-            <IconButton color="inherit" onClick={handleMenuOpen}>
-              <MenuIcon sx={{ color: "#e0f2e9" }} />
+            <IconButton onClick={handleMenuOpen} size="small">
+              <MenuIcon sx={{ color: "#e0f2e9", fontSize: "1.4rem" }} />
             </IconButton>
+
             <Menu
               anchorEl={anchorEl}
               open={Boolean(anchorEl)}
               onClose={handleMenuClose}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
               PaperProps={{
                 sx: {
-                  background: "linear-gradient(145deg, #1e3a2f 0%, #2f855a 100%)",
-                  color: "#e0f2e9",
-                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
                   mt: 1,
+                  background: "rgba(20, 35, 28, 0.85)",
+                  backdropFilter: "blur(16px)",
+                  WebkitBackdropFilter: "blur(16px)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  borderRadius: 0,
+                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.24)",
+                  minWidth: 180,
                 },
               }}
             >
@@ -207,28 +224,34 @@ export default function TopNavBar() {
                   key={item}
                   onClick={() => navigateTo(item)}
                   sx={{
-                    fontWeight: "600",
-                    fontSize: "0.9rem",
-                    py: 1,
+                    color: "#e0f2e9",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    py: 1.25,
+                    px: 2,
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    "&:last-child": { borderBottom: "none" },
                     "&:hover": {
-                      background: "rgba(255, 255, 255, 0.1)",
+                      background: "rgba(47, 133, 90, 0.2)",
                     },
                   }}
                 >
                   {item}
                 </MenuItem>
               ))}
+
               {!isAuthenticated ? (
                 <>
                   <MenuItem
                     onClick={handleLoginClick}
                     sx={{
-                      fontWeight: "600",
-                      fontSize: "0.9rem",
-                      py: 1,
-                      "&:hover": {
-                        background: "rgba(255, 255, 255, 0.1)",
-                      },
+                      color: "#e0f2e9",
+                      fontWeight: 600,
+                      fontSize: "0.875rem",
+                      py: 1.25,
+                      px: 2,
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                      "&:hover": { background: "rgba(47, 133, 90, 0.2)" },
                     }}
                   >
                     Login
@@ -236,11 +259,14 @@ export default function TopNavBar() {
                   <MenuItem
                     onClick={handleRegisterClick}
                     sx={{
-                      fontWeight: "600",
-                      fontSize: "0.9rem",
-                      py: 1,
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: "0.875rem",
+                      py: 1.25,
+                      px: 2,
+                      background: "linear-gradient(45deg, #2f855a 0%, #4caf50 100%)",
                       "&:hover": {
-                        background: "rgba(255, 255, 255, 0.1)",
+                        background: "linear-gradient(45deg, #276749 0%, #388e3c 100%)",
                       },
                     }}
                   >
@@ -251,11 +277,14 @@ export default function TopNavBar() {
                 <MenuItem
                   onClick={handleLogoutClick}
                   sx={{
-                    fontWeight: "600",
-                    fontSize: "0.9rem",
-                    py: 1,
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "0.875rem",
+                    py: 1.25,
+                    px: 2,
+                    background: "linear-gradient(45deg, #d32f2f 0%, #c62828 100%)",
                     "&:hover": {
-                      background: "rgba(255, 255, 255, 0.1)",
+                      background: "linear-gradient(45deg, #b71c1c 0%, #9a0007 100%)",
                     },
                   }}
                 >

@@ -2,6 +2,7 @@ import json
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.decorators import api_view
 from django.conf import settings
 from django.core.mail import send_mail
 from web3 import Web3
@@ -9,6 +10,7 @@ from web3 import Web3
 from .serializers import FarmerSerializer
 from .models import Farmer
 from . import web3_helpers
+
 
 class RegisterView(APIView):
     def post(self, request):
@@ -19,16 +21,15 @@ class RegisterView(APIView):
 
         farmer = serializer.save()
 
-        # Build payload to hash (no raw PII on chain). We hash strings (optionally hashed PII too)
+        # Build payload to hash (no raw PII on chain)
         payload = {
             "uid": str(farmer.uid),
-            # to avoid raw PII on chain, we store keccak of fields in payload json
             "full_name_hash": Web3.keccak(text=farmer.full_name).hex(),
             "national_id_hash": Web3.keccak(text=farmer.national_id).hex(),
             "phone_hash": Web3.keccak(text=farmer.phone).hex(),
             "email_hash": Web3.keccak(text=farmer.email).hex(),
             "gps": {"lat": str(farmer.gps_lat), "long": str(farmer.gps_long)},
-            "sacco": {"membership": farmer.sacco_membership, "name": farmer.sacco_name}
+            "sacco": {"membership": farmer.sacco_membership}
         }
         payload_json = json.dumps(payload, sort_keys=True)
 
@@ -64,10 +65,10 @@ Keep your Farmer ID safe.
             farmer.save()
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# farmers/views.py
-from django.http import JsonResponse
-from .models import Farmer
 
+# ✅ Corrected farmers list endpoint
+@api_view(['GET'])
 def list_farmers(request):
-    farmers = Farmer.objects.all().values('uid', 'user', 'status')
-    return JsonResponse(list(farmers), safe=False)
+    farmers = Farmer.objects.all()
+    serializer = FarmerSerializer(farmers, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)

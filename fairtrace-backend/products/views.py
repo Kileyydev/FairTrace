@@ -469,3 +469,38 @@ class TraceProductAPIView(APIView):
             "tx_hash": product.tx_hash,
         }
         return Response(data, status=200)
+    
+    from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_status(request, uid):
+    """
+    Updates the status of a product by its UID.
+    Expects JSON: { "status": "<new_status>" }
+    """
+    try:
+        product = Product.objects.get(uid=uid)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"detail": "Status is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Optionally, you can validate allowed statuses
+    allowed_statuses = ["approved", "harvested", "in_transit", "delivered"]
+    if new_status not in allowed_statuses:
+        return Response({"detail": f"Invalid status. Allowed: {allowed_statuses}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    product.status = new_status
+    product.save()
+
+    return Response({
+        "uid": product.uid,
+        "status": product.status,
+    })

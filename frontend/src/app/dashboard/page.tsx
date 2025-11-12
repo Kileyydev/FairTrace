@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -28,8 +27,10 @@ import {
   Card,
   CardContent,
   CardMedia,
+  IconButton,
+  InputAdornment,
 } from "@mui/material";
-import Grid from "@mui/material/Grid";
+import { Search as SearchIcon, Close as CloseIcon } from "@mui/icons-material";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -90,14 +91,20 @@ const theme = createTheme({
   typography: { fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif' },
 });
 
+const DRAWER_WIDTH = 260;
+
 export default function Dashboard() {
   const [farmerName, setFarmerName] = useState<string>("");
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>("dashboard");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [openProductDialog, setOpenProductDialog] = useState(false);
   const [formData, setFormData] = useState({
     farmerName: "",
     phonenumber: "",
@@ -134,71 +141,79 @@ export default function Dashboard() {
     }
   }, [router]);
 
-const fetchProducts = async () => {
-  setError(null);
-  const token = await getValidAccessToken();
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredProducts(products);
+    } else {
+      const filtered = products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.product_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.pid.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredProducts(filtered);
+    }
+  }, [searchQuery, products]);
 
-  if (!token) {
-    setError("Session expired. Please log in again.");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("Backend error fetching products:", data);
-      setError(data.detail || "Failed to fetch products");
+  const fetchProducts = async () => {
+    setError(null);
+    const token = await getValidAccessToken();
+    if (!token) {
+      setError("Session expired. Please log in again.");
       return;
     }
-
-    const formattedProducts = data.map((p: any) => ({
-      id: p.uid,
-      name: p.title,
-      product_type: p.variety,
-      quantity: p.quantity,
-      acres: p.acres,
-      status: p.status,
-      pid: p.pid,
-      qr_code: p.qr_code_data,
-      harvested: false,
-      stages: [],
-      feedbacks: [],
-    }));
-
-    setProducts(formattedProducts);
-  } catch (err) {
-    console.error("Error fetching products:", err);
-    setError("Failed to load products. Please try again.");
-  }
-};
-
-const getValidAccessToken = async (): Promise<string | null> => {
-  let token = localStorage.getItem("access");
-  const refresh = localStorage.getItem("refresh");
-
-  if (!token && refresh) {
     try {
-      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh }),
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      const refreshData = await refreshRes.json();
-      if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
-      token = refreshData.access;
-      localStorage.setItem("access", token ?? "");
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Backend error fetching products:", data);
+        setError(data.detail || "Failed to fetch products");
+        return;
+      }
+      const formattedProducts = data.map((p: any) => ({
+        id: p.uid,
+        name: p.title,
+        product_type: p.variety,
+        quantity: p.quantity,
+        acres: p.acres,
+        status: p.status,
+        pid: p.pid,
+        qr_code: p.qr_code_data,
+        harvested: false,
+        stages: [],
+        feedbacks: [],
+      }));
+      setProducts(formattedProducts);
+      setFilteredProducts(formattedProducts);
     } catch (err) {
-      console.error("Token refresh failed:", err);
-      return null;
+      console.error("Error fetching products:", err);
+      setError("Failed to load products. Please try again.");
     }
-  }
+  };
 
-  return token;
-};
+  const getValidAccessToken = async (): Promise<string | null> => {
+    let token = localStorage.getItem("access");
+    const refresh = localStorage.getItem("refresh");
+    if (!token && refresh) {
+      try {
+        const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh }),
+        });
+        const refreshData = await refreshRes.json();
+        if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
+        token = refreshData.access;
+        localStorage.setItem("access", token ?? "");
+      } catch (err) {
+        console.error("Token refresh failed:", err);
+        return null;
+      }
+    }
+    return token;
+  };
 
   const fetchPayments = async (token: string) => {
     try {
@@ -229,153 +244,130 @@ const getValidAccessToken = async (): Promise<string | null> => {
   };
 
   const refreshAccessToken = async (): Promise<string | null> => {
-  const refresh = localStorage.getItem("refresh");
-  if (!refresh) return null;
-
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
-    });
-
-    if (!res.ok) throw new Error("Failed to refresh token");
-
-    const data = await res.json();
-    localStorage.setItem("access", data.access);
-    return data.access;
-  } catch (err) {
-    console.error("Token refresh error:", err);
-    return null;
-  }
-};
-
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
-  const { name, value } = e.target;
-  setFormData((prev) => ({
-    ...prev,
-    [name as string]: typeof value === "string" ? value.trim() : value,
-  }));
-};
-
- const getValidToken = async (): Promise<string | null> => {
-  const token = localStorage.getItem("access");
-  if (!token) return null;
-  try {
-    // Try decoding to check expiry (assuming exp in seconds)
-    const decoded: any = jwtDecode(token);
-    if (decoded.exp && Date.now() / 1000 > decoded.exp) {
-      // Token expired, try to refresh
-      return await refreshAccessToken();
-    }
-    return token;
-  } catch {
-    // If decode fails, try to refresh
-    return await refreshAccessToken();
-  }
-};
-
-const handleSubmitProduct = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError(null);
-
-  const { name, product_type, quantity, acres } = formData;
-  if (!name || !product_type || !quantity || !acres) {
-    setError("All fields are required.");
-    return;
-  }
-
-  const quantityNum = Number(quantity);
-  const acresNum = Number(acres);
-
-  const payload = {
-    title: name,
-    variety: product_type,
-    quantity: quantityNum,
-    acres: acresNum,
-    description: "",
-    price: 0,
-  };
-
-  const attemptRequest = async (accessToken: string) => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    return { res, data };
-  };
-
-  let token = localStorage.getItem("access");
-  let response = await attemptRequest(token!);
-
-  // If 401, try refreshing
-  if (response.res.status === 401) {
     const refresh = localStorage.getItem("refresh");
-    if (!refresh) {
-      setError("Session expired. Please log in again.");
-      return;
-    }
-
+    if (!refresh) return null;
     try {
-      const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh }),
       });
-      const refreshData = await refreshRes.json();
-      if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
+      if (!res.ok) throw new Error("Failed to refresh token");
+      const data = await res.json();
+      localStorage.setItem("access", data.access);
+      return data.access;
+    } catch (err) {
+      console.error("Token refresh error:", err);
+      return null;
+    }
+  };
 
-      token = refreshData.access;
-      if (token) {
-        localStorage.setItem("access", token);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name as string]: typeof value === "string" ? value.trim() : value,
+    }));
+  };
+
+  const getValidToken = async (): Promise<string | null> => {
+    const token = localStorage.getItem("access");
+    if (!token) return null;
+    try {
+      const decoded: any = jwtDecode(token);
+      if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+        return await refreshAccessToken();
       }
+      return token;
+    } catch {
+      return await refreshAccessToken();
+    }
+  };
 
-      // Retry request with new token
-      if (token) {
-        response = await attemptRequest(token);
-      } else {
+  const handleSubmitProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const { name, product_type, quantity, acres } = formData;
+    if (!name || !product_type || !quantity || !acres) {
+      setError("All fields are required.");
+      return;
+    }
+    const quantityNum = Number(quantity);
+    const acresNum = Number(acres);
+    const payload = {
+      title: name,
+      variety: product_type,
+      quantity: quantityNum,
+      acres: acresNum,
+      description: "",
+      price: 0,
+    };
+    const attemptRequest = async (accessToken: string) => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      return { res, data };
+    };
+    let token = localStorage.getItem("access");
+    let response = await attemptRequest(token!);
+    if (response.res.status === 401) {
+      const refresh = localStorage.getItem("refresh");
+      if (!refresh) {
         setError("Session expired. Please log in again.");
         return;
       }
-    } catch (err) {
-      console.error("Token refresh failed:", err);
-      setError("Session expired. Please log in again.");
+      try {
+        const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh }),
+        });
+        const refreshData = await refreshRes.json();
+        if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
+        token = refreshData.access;
+        if (token) {
+          localStorage.setItem("access", token);
+        }
+        if (token) {
+          response = await attemptRequest(token);
+        } else {
+          setError("Session expired. Please log in again.");
+          return;
+        }
+      } catch (err) {
+        console.error("Token refresh failed:", err);
+        setError("Session expired. Please log in again.");
+        return;
+      }
+    }
+    if (!response.res.ok) {
+      console.error("Backend error:", response.data);
+      let errorMessage = "Failed to add product. Please check your input.";
+      if (response.data) {
+        if (response.data.title) errorMessage = response.data.title.join(", ");
+        else if (response.data.detail) errorMessage = response.data.detail;
+      }
+      setError(errorMessage);
       return;
     }
-  }
-
-  if (!response.res.ok) {
-    console.error("Backend error:", response.data);
-    let errorMessage = "Failed to add product. Please check your input.";
-    if (response.data) {
-      if (response.data.title) errorMessage = response.data.title.join(", ");
-      else if (response.data.detail) errorMessage = response.data.detail;
-    }
-    setError(errorMessage);
-    return;
-  }
-
-  // Success
-  setProducts((prev) => [...prev, response.data]);
-  setFormData({ name: "", product_type: "", quantity: "", acres: "" });
-  setTermsRead(false);
-  setTermsScrolled(false);
-  setOpenTerms(false);
-};
-
+    setProducts((prev) => [...prev, response.data]);
+    setFormData({ farmerName: "", phonenumber: "", location: "", name: "", product_type: "", quantity: "", acres: "" });
+    setTermsRead(false);
+    setTermsScrolled(false);
+    setOpenTerms(false);
+  };
 
   const handleSubmitFeedback = async () => {
     if (!newFeedback.trim()) {
       setError("Feedback cannot be empty.");
       return;
     }
-
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/feedbacks/`, {
         method: "POST",
@@ -401,54 +393,58 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
     }
   };
 
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product);
+    setOpenProductDialog(true);
+  };
+
+  const handleCloseProductDialog = () => {
+    setOpenProductDialog(false);
+    setSelectedProduct(null);
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case "dashboard":
         return (
           <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
+            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34", mb: 2 }}>
               Welcome, {farmerName}!
             </Typography>
             <Typography variant="body1" sx={{ mb: 4, color: "#4a6b5e" }}>
               Manage your products, payments, and feedback from the sidebar.
             </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6} md={4}>
-                <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-                  <CardContent>
-                    <Typography variant="h6" color="#1a3c34">Total Products</Typography>
-                    <Typography variant="h4" color="#2f855a">{products.length}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-                  <CardContent>
-                    <Typography variant="h6" color="#1a3c34">Pending Payments</Typography>
-                    <Typography variant="h4" color="#2f855a">
-                      {payments.filter((p) => p.status === "Pending").length}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-                  <CardContent>
-                    <Typography variant="h6" color="#1a3c34">Feedback Received</Typography>
-                    <Typography variant="h4" color="#2f855a">{feedbacks.length}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+              <Card sx={{ flex: "1 1 280px", minWidth: "280px", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Total Products</Typography>
+                  <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>{products.length}</Typography>
+                </CardContent>
+              </Card>
+              <Card sx={{ flex: "1 1 280px", minWidth: "280px", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Pending Payments</Typography>
+                  <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>
+                    {payments.filter((p) => p.status === "Pending").length}
+                  </Typography>
+                </CardContent>
+              </Card>
+              <Card sx={{ flex: "1 1 280px", minWidth: "280px", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Feedback Received</Typography>
+                  <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>{feedbacks.length}</Typography>
+                </CardContent>
+              </Card>
+            </Box>
           </Box>
         );
       case "add-product":
         return (
           <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
-              Add New Product, {farmerName}!
+            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34", mb: 3 }}>
+              Add New Product
             </Typography>
-            <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: "600px" }}>
               <TextField
                 label="Product Name"
                 name="name"
@@ -456,16 +452,15 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                 onChange={handleInputChange}
                 fullWidth
                 required
-                InputLabelProps={{ style: { color: "#1a3c34" } }}
-                InputProps={{ style: { color: "#1a3c34" } }}
+                variant="outlined"
               />
-              <FormControl fullWidth required>
-                <InputLabel sx={{ color: "#1a3c34" }}>Product Type</InputLabel>
+              <FormControl fullWidth required variant="outlined">
+                <InputLabel>Product Type</InputLabel>
                 <Select
                   name="product_type"
                   value={formData.product_type}
                   onChange={handleInputChange}
-                  sx={{ color: "#1a3c34" }}
+                  label="Product Type"
                 >
                   <MenuItem value="Grain">Grain</MenuItem>
                   <MenuItem value="Vegetable">Vegetable</MenuItem>
@@ -481,8 +476,7 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                 onChange={handleInputChange}
                 fullWidth
                 required
-                InputLabelProps={{ style: { color: "#1a3c34" } }}
-                InputProps={{ style: { color: "#1a3c34" } }}
+                variant="outlined"
               />
               <TextField
                 label="Acres"
@@ -492,20 +486,19 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                 onChange={handleInputChange}
                 fullWidth
                 required
-                InputLabelProps={{ style: { color: "#1a3c34" } }}
-                InputProps={{ style: { color: "#1a3c34" } }}
+                variant="outlined"
               />
               <Button
                 variant="contained"
                 color="primary"
                 onClick={() => setOpenTerms(true)}
-                sx={{ mt: 2 }}
+                sx={{ mt: 2, py: 1.5, fontWeight: "600" }}
               >
                 Submit Product
               </Button>
             </Box>
             <Dialog open={openTerms} onClose={() => setOpenTerms(false)} maxWidth="sm" fullWidth>
-              <DialogTitle>Terms and Conditions</DialogTitle>
+              <DialogTitle sx={{ fontWeight: "600", color: "#1a3c34" }}>Terms and Conditions</DialogTitle>
               <DialogContent onScroll={handleTermsScroll} sx={{ maxHeight: "400px", overflowY: "auto" }}>
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   Please read the following terms and conditions carefully before submitting your product:
@@ -529,7 +522,7 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                   6. Termination: The platform reserves the right to remove any product listing that violates these terms or platform policies without prior notice.
                 </Typography>
               </DialogContent>
-              <DialogActions>
+              <DialogActions sx={{ p: 2 }}>
                 <FormControlLabel
                   control={
                     <Checkbox
@@ -543,6 +536,7 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                 <Button onClick={() => setOpenTerms(false)}>Cancel</Button>
                 <Button
                   onClick={handleSubmitProduct}
+                  variant="contained"
                   color="primary"
                   disabled={!termsRead || !termsScrolled}
                 >
@@ -555,100 +549,195 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
       case "products":
         return (
           <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
-              My Products, {farmerName}!
-            </Typography>
-            <Grid container spacing={3}>
-              {products.map((product) => (
-                <Grid item xs={12} sm={6} md={4} key={product.pid}>
-                  <motion.div whileHover={{ scale: 1.03 }} transition={{ duration: 0.3 }}>
-                    <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", border: "1px solid #c4d8c9" }}>
-                      {product.qr_code && (
-                        <CardMedia component="img" height="140" image={product.qr_code} alt="QR Code" sx={{ objectFit: "contain" }} />
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, flexWrap: "wrap", gap: 2 }}>
+              <Typography variant="h4" fontWeight="600" sx={{ color: "#1a3c34" }}>
+                My Products
+              </Typography>
+              <TextField
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: "300px" }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: "#4a6b5e" }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearchQuery("")}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3 }}>
+              {filteredProducts.map((product) => (
+                <motion.div
+                  key={product.pid}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ duration: 0.3 }}
+                  onClick={() => handleProductClick(product)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", height: "100%", display: "flex", flexDirection: "column" }}>
+                    {product.qr_code && (
+                      <CardMedia
+                        component="img"
+                        height="140"
+                        image={product.qr_code}
+                        alt="QR Code"
+                        sx={{ objectFit: "contain", bgcolor: "#f9f9f9" }}
+                      />
+                    )}
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
+                        {product.name}
+                      </Typography>
+                      <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
+                        Type: {product.product_type}
+                      </Typography>
+                      <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
+                        Status: <strong>{product.status}</strong>
+                      </Typography>
+                      <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
+                        Quantity: {product.quantity}
+                      </Typography>
+                      <Typography variant="body2" color="#4a6b5e">
+                        Acres: {product.acres}
+                      </Typography>
+                      <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid #e0e0e0" }}>
+                        <Typography variant="caption" color="#2f855a" fontWeight="600">
+                          Click to view details →
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </Box>
+
+            {/* Product Details Dialog */}
+            <Dialog open={openProductDialog} onClose={handleCloseProductDialog} maxWidth="md" fullWidth>
+              {selectedProduct && (
+                <>
+                  <DialogTitle sx={{ fontWeight: "600", color: "#1a3c34", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>{selectedProduct.name}</span>
+                    <IconButton onClick={handleCloseProductDialog}>
+                      <CloseIcon />
+                    </IconButton>
+                  </DialogTitle>
+                  <DialogContent dividers>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {selectedProduct.qr_code && (
+                        <Box sx={{ display: "flex", justifyContent: "center", p: 2, bgcolor: "#f9f9f9", borderRadius: "8px" }}>
+                          <img src={selectedProduct.qr_code} alt="QR Code" style={{ maxWidth: "200px", height: "auto" }} />
+                        </Box>
                       )}
-                      <CardContent>
-                        <Typography variant="h6" color="#1a3c34">
-                          {product.name} ({product.product_type})
+                      <Box>
+                        <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
+                          Product Information
                         </Typography>
-                        <Typography variant="body2" color="#4a6b5e">
-                          Status: {product.status}
-                        </Typography>
-                        <Typography variant="body2" color="#4a6b5e">
-                          Quantity: {product.quantity}
-                        </Typography>
-                        <Typography variant="body2" color="#4a6b5e">
-                          Acres: {product.acres}
-                        </Typography>
-                        <Typography variant="body2" color="#4a6b5e">
-                          PID: {product.pid}
-                        </Typography>
-                        <Typography variant="body2" color="#4a6b5e">
-                          Harvested: {product.harvested ? "Yes" : "No"}
-                        </Typography>
-                        <Typography variant="subtitle2" color="#1a3c34" mt={1}>
-                          Supply Chain Journey:
-                        </Typography>
-                        {product.stages.map((stage) => (
-                          <Box key={stage.id} sx={{ ml: 2 }}>
-                            <Typography variant="body2" color="#4a6b5e">
-                              {stage.stage_name} - Qty: {stage.quantity} - Location: {stage.location || "N/A"} - QR Scanned: {stage.scanned_qr ? "Yes" : "No"}
-                            </Typography>
-                          </Box>
-                        ))}
-                        <Typography variant="subtitle2" color="#1a3c34" mt={1}>
-                          Payments:
-                        </Typography>
-                        {payments
-                          .filter((payment) => payment.product_id === product.id)
-                          .map((payment) => (
-                            <Box key={payment.id} sx={{ ml: 2 }}>
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                          <Typography variant="body1"><strong>Product Type:</strong> {selectedProduct.product_type}</Typography>
+                          <Typography variant="body1"><strong>Status:</strong> {selectedProduct.status}</Typography>
+                          <Typography variant="body1"><strong>Quantity:</strong> {selectedProduct.quantity}</Typography>
+                          <Typography variant="body1"><strong>Acres:</strong> {selectedProduct.acres}</Typography>
+                          <Typography variant="body1"><strong>PID:</strong> {selectedProduct.pid}</Typography>
+                          <Typography variant="body1"><strong>Harvested:</strong> {selectedProduct.harvested ? "Yes" : "No"}</Typography>
+                        </Box>
+                      </Box>
+
+                      {selectedProduct.stages.length > 0 && (
+                        <Box>
+                          <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
+                            Supply Chain Journey
+                          </Typography>
+                          {selectedProduct.stages.map((stage) => (
+                            <Box key={stage.id} sx={{ ml: 2, mb: 1, p: 2, bgcolor: "#f5f7f6", borderRadius: "8px" }}>
+                              <Typography variant="body2" color="#1a3c34" fontWeight="600">
+                                {stage.stage_name}
+                              </Typography>
                               <Typography variant="body2" color="#4a6b5e">
-                                Amount: ${payment.amount} - Status: {payment.status} - Date: {new Date(payment.date).toLocaleDateString()}
+                                Quantity: {stage.quantity} | Location: {stage.location || "N/A"} | QR Scanned: {stage.scanned_qr ? "Yes" : "No"}
                               </Typography>
                             </Box>
                           ))}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                </Grid>
-              ))}
-            </Grid>
+                        </Box>
+                      )}
+
+                      {payments.filter((payment) => payment.product_id === selectedProduct.id).length > 0 && (
+                        <Box>
+                          <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
+                            Payment History
+                          </Typography>
+                          {payments
+                            .filter((payment) => payment.product_id === selectedProduct.id)
+                            .map((payment) => (
+                              <Box key={payment.id} sx={{ ml: 2, mb: 1, p: 2, bgcolor: "#f5f7f6", borderRadius: "8px" }}>
+                                <Typography variant="body2" color="#1a3c34">
+                                  <strong>Amount:</strong> ${payment.amount} | <strong>Status:</strong> {payment.status}
+                                </Typography>
+                                <Typography variant="body2" color="#4a6b5e">
+                                  Date: {new Date(payment.date).toLocaleDateString()}
+                                </Typography>
+                              </Box>
+                            ))}
+                        </Box>
+                      )}
+                    </Box>
+                  </DialogContent>
+                  <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={handleCloseProductDialog} variant="contained" color="primary">
+                      Close
+                    </Button>
+                  </DialogActions>
+                </>
+              )}
+            </Dialog>
           </Box>
         );
       case "payments":
         return (
           <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
-              Payments, {farmerName}!
+            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34", mb: 3 }}>
+              Payments
             </Typography>
-            {payments.map((payment) => (
-              <Card key={payment.id} sx={{ mb: 2, borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-                <CardContent>
-                  <Typography variant="h6" color="#1a3c34">
-                    {payment.product_name}
-                  </Typography>
-                  <Typography variant="body2" color="#4a6b5e">
-                    Amount: ${payment.amount}
-                  </Typography>
-                  <Typography variant="body2" color="#4a6b5e">
-                    Status: {payment.status}
-                  </Typography>
-                  <Typography variant="body2" color="#4a6b5e">
-                    Date: {new Date(payment.date).toLocaleDateString()}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: "800px" }}>
+              {payments.map((payment) => (
+                <Card key={payment.id} sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                  <CardContent>
+                    <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
+                      {payment.product_name}
+                    </Typography>
+                    <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
+                      Amount: <strong>${payment.amount}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
+                      Status: <strong>{payment.status}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="#4a6b5e">
+                      Date: {new Date(payment.date).toLocaleDateString()}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
           </Box>
         );
       case "feedback":
         return (
           <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
-              Feedback, {farmerName}!
+            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34", mb: 3 }}>
+              Feedback
             </Typography>
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h6" color="#1a3c34" gutterBottom>
+            <Box sx={{ mb: 4, maxWidth: "700px" }}>
+              <Typography variant="h6" color="#1a3c34" gutterBottom fontWeight="500">
                 Submit New Feedback
               </Typography>
               <TextField
@@ -658,46 +747,40 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
                 value={newFeedback}
                 onChange={(e) => setNewFeedback(e.target.value)}
                 fullWidth
-                InputLabelProps={{ style: { color: "#1a3c34" } }}
-                InputProps={{ style: { color: "#1a3c34" } }}
+                variant="outlined"
+                sx={{ mb: 2 }}
               />
               <Button
                 variant="contained"
                 color="primary"
                 onClick={handleSubmitFeedback}
-                sx={{ mt: 2 }}
+                sx={{ py: 1.5, fontWeight: "600" }}
               >
                 Submit Feedback
               </Button>
             </Box>
-            <Typography variant="h6" color="#1a3c34" gutterBottom>
+            <Typography variant="h6" color="#1a3c34" gutterBottom fontWeight="500" mb={2}>
               Received Feedback
             </Typography>
-            {feedbacks.map((fb) => (
-              <Card key={fb.id} sx={{ mb: 2, borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-                <CardContent>
-                  <Typography variant="body2" color="#4a6b5e">
-                    "{fb.message}" - {new Date(fb.created_at).toLocaleDateString()}
-                  </Typography>
-                  {fb.product_name && (
-                    <Typography variant="body2" color="#4a6b5e">
-                      Product: {fb.product_name}
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: "800px" }}>
+              {feedbacks.map((fb) => (
+                <Card key={fb.id} sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+                  <CardContent>
+                    <Typography variant="body1" color="#1a3c34" sx={{ mb: 1 }}>
+                      "{fb.message}"
                     </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
-        );
-      case "profile":
-        return (
-          <Box>
-            <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34" }}>
-              Profile, {farmerName}!
-            </Typography>
-            <Typography variant="body1" sx={{ color: "#4a6b5e" }}>
-              Profile management is coming soon. Here you can update your personal information and account settings.
-            </Typography>
+                    <Typography variant="body2" color="#4a6b5e">
+                      {new Date(fb.created_at).toLocaleDateString()}
+                    </Typography>
+                    {fb.product_name && (
+                      <Typography variant="body2" color="#4a6b5e" mt={1}>
+                        Product: <strong>{fb.product_name}</strong>
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
           </Box>
         );
       default:
@@ -708,113 +791,144 @@ const handleSubmitProduct = async (e: React.FormEvent) => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f5f6f5" }}>
+      <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f5f7f6" }}>
         <TopNavBar />
-        <Box sx={{ display: "flex", flex: 1 }}>
-          {/* Sidebar */}
-          <Drawer
-            variant="permanent"
-            sx={{
-              width: 240,
-              flexShrink: 0,
-              "& .MuiDrawer-paper": {
-                width: 240,
-                boxSizing: "border-box",
-                background: "#ffffff",
-                color: "#1a3c34",
-                borderRight: "1px solid #c4d8c9",
-              },
-            }}
-          >
-            <Box sx={{ p: 2 }}>
-              <Typography variant="h6" fontWeight="600" mb={2}>
-                Farmer Dashboard
-              </Typography>
-              <Divider sx={{ borderColor: "#c4d8c9" }} />
-              <List>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "dashboard"}
-                    onClick={() => setActiveSection("dashboard")}
-                  >
-                    <ListItemText primary="Dashboard" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "add-product"}
-                    onClick={() => setActiveSection("add-product")}
-                  >
-                    <ListItemText primary="Add Product" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "products"}
-                    onClick={() => setActiveSection("products")}
-                  >
-                    <ListItemText primary="My Products" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "payments"}
-                    onClick={() => setActiveSection("payments")}
-                  >
-                    <ListItemText primary="Payments" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "feedback"}
-                    onClick={() => setActiveSection("feedback")}
-                  >
-                    <ListItemText primary="Feedback" />
-                  </ListItemButton>
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={activeSection === "profile"}
-                    onClick={() => setActiveSection("profile")}
-                  >
-                    <ListItemText primary="Profile" />
-                  </ListItemButton>
-                </ListItem>
-              </List>
-            </Box>
-          </Drawer>
-
-          {/* Main Content */}
+        <Box sx={{ display: "flex", flex: 1, position: "relative" }}>
+          {/* Sidebar - Fixed height between TopNavBar and Footer */}
           <Box
             sx={{
-              flex: 1,
-              p: { xs: 2, md: 4 },
-              ml: { xs: 0, md: "240px" },
-              bgcolor: "#ffffff",
-              borderRadius: "12px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-              m: { xs: 2, md: 4 },
+              width: DRAWER_WIDTH,
+              flexShrink: 0,
               position: "relative",
-              overflow: "hidden",
             }}
           >
             <Box
               sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                opacity: 0.05,
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232f855a' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M0 0h40v40H0z'/%3E%3Cpath d='M20 20l10 10-10 10-10-10z'/%3E%3C/g%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
+                position: "fixed",
+                width: DRAWER_WIDTH,
+                top: "64px",
+                bottom: "130px",
+             
+                background: "#ffffff",
+                borderRight: "1px solid #e0e0e0",
+                zIndex: 10,
               }}
-            />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              {error && (
-                <Typography variant="body1" color="error.main" textAlign="center" sx={{ mb: 4 }}>
-                  {error}
+            >
+              <Box sx={{ p: 2 }}>
+                <Typography variant="h6" fontWeight="600" mb={2} color="#1a3c34">
+                  Farmer Dashboard
                 </Typography>
+                <Divider sx={{ borderColor: "#e0e0e0", mb: 2 }} />
+                <List>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      selected={activeSection === "dashboard"}
+                      onClick={() => setActiveSection("dashboard")}
+                      sx={{
+                        borderRadius: "8px",
+                        "&.Mui-selected": {
+                          bgcolor: "#e8f5e9",
+                          "&:hover": { bgcolor: "#e8f5e9" },
+                        },
+                      }}
+                    >
+                      <ListItemText primary="Dashboard" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      selected={activeSection === "add-product"}
+                      onClick={() => setActiveSection("add-product")}
+                      sx={{
+                        borderRadius: "8px",
+                        "&.Mui-selected": {
+                          bgcolor: "#e8f5e9",
+                          "&:hover": { bgcolor: "#e8f5e9" },
+                        },
+                      }}
+                    >
+                      <ListItemText primary="Add Product" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      selected={activeSection === "products"}
+                      onClick={() => setActiveSection("products")}
+                      sx={{
+                        borderRadius: "8px",
+                        "&.Mui-selected": {
+                          bgcolor: "#e8f5e9",
+                          "&:hover": { bgcolor: "#e8f5e9" },
+                        },
+                      }}
+                    >
+                      <ListItemText primary="My Products" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      selected={activeSection === "payments"}
+                      onClick={() => setActiveSection("payments")}
+                      sx={{
+                        borderRadius: "8px",
+                        "&.Mui-selected": {
+                          bgcolor: "#e8f5e9",
+                          "&:hover": { bgcolor: "#e8f5e9" },
+                        },
+                      }}
+                    >
+                      <ListItemText primary="Payments" />
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      selected={activeSection === "feedback"}
+                      onClick={() => setActiveSection("feedback")}
+                      sx={{
+                        borderRadius: "8px",
+                        "&.Mui-selected": {
+                          bgcolor: "#e8f5e9",
+                          "&:hover": { bgcolor: "#e8f5e9" },
+                        },
+                      }}
+                    >
+                      <ListItemText primary="Feedback" />
+                    </ListItemButton>
+                  </ListItem>
+                </List>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Main Content */}
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              p: { xs: 2, sm: 3, md: 4 },
+              minHeight: "calc(100vh - 124px)",
+              bgcolor: "#ffffff",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              {error && (
+                <Box
+                  sx={{
+                    mb: 3,
+                    p: 2,
+                    bgcolor: "#ffebee",
+                    borderRadius: "8px",
+                    border: "1px solid #ef5350",
+                  }}
+                >
+                  <Typography variant="body1" color="error.main">
+                    {error}
+                  </Typography>
+                </Box>
               )}
               {renderContent()}
             </motion.div>
