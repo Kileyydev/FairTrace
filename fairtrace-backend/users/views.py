@@ -10,7 +10,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import MyTokenObtainPairSerializer
 import hashlib, secrets
-from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer, ProductSerializer, ProductStageSerializer
+from .serializers import RegisterSerializer, LoginSerializer, VerifyOTPSerializer, ProductStageSerializer
+from products.serializers import ProductSerializer
 from .models import OTPToken, User, Product, ProductStage
 from farmers.models import Farmer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -191,14 +192,30 @@ class ProductRegisterAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+import logging
+
 class ProductListAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    # Set up logger for this module
+    logger = logging.getLogger(__name__)
 
     def get(self, request):
         products = Product.objects.filter(farmer=request.user)
         serializer = ProductSerializer(products, many=True)
         return Response(serializer.data)
 
+    def post(self, request):
+        self.logger.debug(f"🟡 Incoming product data: {request.data}")
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            # ✅ attach the logged-in user as farmer
+            serializer.save(farmer=request.user)
+            self.logger.info("✅ Product created successfully")
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            self.logger.error(f"❌ Serializer errors: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ProductStageListAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -232,3 +249,50 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+    
+from .models import Transporter
+from .serializers import TransporterSerializer
+
+class TransporterListAPIView(APIView):
+    permission_classes = [permissions.AllowAny]  # you can change this later
+
+    def get(self, request):
+        transporters = Transporter.objects.select_related("user").all()
+        serializer = TransporterSerializer(transporters, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from products.models import Product  # ✅ make sure this is correct
+from products.serializers import ProductSerializer
+from logistics.models import Transporter
+
+class ProductAllocateAPIView(APIView):
+    """
+    Allows a SACCO admin to allocate a product to a transporter.
+    """
+
+    def post(self, request, uid):
+        try:
+            product = Product.objects.get(uid=uid)
+        except Product.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        transporter_id = request.data.get("transporter_id")
+        if not transporter_id:
+            return Response({"detail": "Transporter ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            transporter = Transporter.objects.get(id=transporter_id)
+        except Transporter.DoesNotExist:
+            return Response({"detail": "Transporter not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Allocate logic (customize if needed)
+        product.transporter = transporter
+        product.save()
+
+        return Response({
+            "message": f"Product '{product.title}' allocated to {transporter.user.email}",
+            "product": ProductSerializer(product).data
+        }, status=status.HTTP_200_OK)

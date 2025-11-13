@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'products',
     'feedbacks',
     'payments',
+    'logistics',
 ]
 
 # MIDDLEWARE

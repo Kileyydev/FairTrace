@@ -1,14 +1,21 @@
 from rest_framework import serializers
-from .models import User, OTPToken, Product, ProductStage
-from farmers.models import Farmer
-from django.utils import timezone
-from farmers.utils import canonical_farmer_string, sha256_hex
-from django.core.mail import send_mail
 from django.contrib.auth.hashers import check_password
+from django.utils import timezone
+from django.core.mail import send_mail
 from datetime import timedelta
+import secrets
+
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import User, OTPToken, ProductStage, Transporter
+from farmers.models import Farmer
+from farmers.utils import canonical_farmer_string, sha256_hex
+from products.models import Product
 
+
+# ================================
+# 1. REGISTER SERIALIZER (Farmer)
+# ================================
 class RegisterSerializer(serializers.Serializer):
     fullName = serializers.CharField()
     nationalId = serializers.CharField()
@@ -69,15 +76,18 @@ class RegisterSerializer(serializers.Serializer):
         return farmer
 
 
+# ================================
+# 2. LOGIN SERIALIZER
+# ================================
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
 
+# ================================
+# 3. OTP CREATE SERIALIZER
+# ================================
 class OTPCreateSerializer(serializers.Serializer):
-    """
-    Optional serializer if you want to create OTPs via API.
-    """
     email = serializers.EmailField()
 
     def create(self, validated_data):
@@ -86,12 +96,10 @@ class OTPCreateSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("Invalid email.")
 
-        # Generate random OTP
-        import secrets
-        otp_plain = f"{secrets.randbelow(999999):06d}"  # 6-digit OTP
+        # Generate 6-digit OTP
+        otp_plain = f"{secrets.randbelow(999999):06d}"
         otp_hash = sha256_hex(otp_plain)
 
-        # Set expiry 10 minutes from now
         expires_at = timezone.now() + timedelta(minutes=10)
 
         otp_obj = OTPToken.objects.create(
@@ -102,10 +110,10 @@ class OTPCreateSerializer(serializers.Serializer):
             used=False
         )
 
-        # Optionally send OTP via email
+        # Send OTP via email
         send_mail(
-            subject="Your OTP for FairTrace",
-            message=f"Your OTP is: {otp_plain}\nIt expires at {expires_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}",
+            subject="Your FairTrace OTP",
+            message=f"Your OTP is: {otp_plain}\nValid for 10 minutes.\nExpires at: {expires_at.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}",
             from_email="no-reply@fairtrace.com",
             recipient_list=[user.email],
             fail_silently=True
@@ -114,29 +122,55 @@ class OTPCreateSerializer(serializers.Serializer):
         return otp_obj
 
 
-# users/serializers.py
-from rest_framework import serializers
-
+# ================================
+# 4. OTP VERIFY SERIALIZER
+# ================================
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False, allow_blank=True)
     user_id = serializers.IntegerField(required=False)
     otp = serializers.CharField(max_length=6)
 
     def validate(self, data):
-        # Require either email or user_id
         if not data.get("email") and not data.get("user_id"):
             raise serializers.ValidationError("Either 'email' or 'user_id' must be provided.")
-        # Ensure otp looks like a 6-digit code (basic check)
+
         otp = data.get("otp", "")
         if not otp.isdigit() or len(otp) != 6:
             raise serializers.ValidationError({"otp": "OTP must be a 6-digit numeric code."})
+
         return data
 
 
-class ProductSerializer(serializers.ModelSerializer):
+# ================================
+# 5. TRANSPORTER SERIALIZER
+# ================================
+class TransporterSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.get_full_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    phone = serializers.CharField(read_only=True)
+
     class Meta:
-        model = Product
-        fields = "__all__"
+        model = Transporter
+        fields = [
+            'id',
+            'name',
+            'email',
+            'phone',
+            'vehicle',
+            'license_plate',
+        ]
+        read_only_fields = ['id', 'name', 'email', 'phone']
+
+
+# ================================
+# 6. PRODUCT & STAGE SERIALIZERS
+# ================================
+from rest_framework import serializers
+from .models import Product
+
+from rest_framework import serializers
+from products.models import Product
+
 
 
 class ProductStageSerializer(serializers.ModelSerializer):
@@ -144,10 +178,25 @@ class ProductStageSerializer(serializers.ModelSerializer):
         model = ProductStage
         fields = "__all__"
 
+
+# ================================
+# 7. CUSTOM JWT TOKEN (with roles)
+# ================================
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        # Add custom claims
+
+        # Inject roles into JWT
+        token['user_id'] = user.id
+        token['email'] = user.email
         token['is_sacco_admin'] = user.is_sacco_admin
+        token['is_transporter'] = user.is_transporter  # ← CRITICAL
+
+        # Optional: Add transporter profile data if exists
+        if hasattr(user, 'transporter_profile'):
+            token['transporter_id'] = user.transporter_profile.id
+            token['vehicle'] = user.transporter_profile.vehicle
+            token['license_plate'] = user.transporter_profile.license_plate
+
         return token

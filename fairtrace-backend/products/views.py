@@ -5,9 +5,13 @@ from rest_framework import viewsets
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import Product, ProductImage, TransportLocation, Stage
-from .serializers import ProductSerializer, ProductImageSerializer, TransportLocationSerializer, StageSerializer
+from .serializers import ProductImageSerializer, TransportLocationSerializer, StageSerializer
+from products.serializers import ProductSerializer
 from .utils import generate_pid, create_qr_data_url
 from tasks.anchor import enqueue_anchor  # we'll create a simple task enqueuer
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+import logging
+
 
 class FarmerProductListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -181,6 +185,8 @@ def approve_product(request, product_uid):
     except Product.DoesNotExist:
         return Response({"detail": "Product not found"}, status=404)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def all_products(request):
     if not request.user.is_sacco_admin:
         return Response({"detail": "Not authorized"}, status=403)
@@ -188,6 +194,9 @@ def all_products(request):
     serializer = AdminProductSerializer(products, many=True)
     return Response(serializer.data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def sacco_admin_products(request):
     products = Product.objects.all().order_by('-created_at')
     serializer = ProductSerializer(products, many=True)
@@ -443,24 +452,43 @@ class AddJourneyStageAPIView(APIView):
         )
         return Response(StageSerializer(stage).data, status=201)
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import permissions
+from .models import Product
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from .models import Product
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from .models import Product
+
 class TraceProductAPIView(APIView):
-    """
-    Public endpoint → anyone scanning QR can see product details
-    """
-    authentication_classes = []  # 👈 no login required
-    permission_classes = []      # 👈 open to all
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, uid):
         try:
-            product = Product.objects.get(uid=uid, status="approved")
+            # ✅ Get product that is NOT pending
+            product = Product.objects.exclude(status="pending").get(uid=uid)
         except Product.DoesNotExist:
-            return Response({"detail": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+            print(f"❌ Product not found or still pending: {uid}")
+            return Response(
+                {"detail": "Product not found or still pending"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        print(f"✅ Product found for trace: {product.uid} — {product.status}")
 
         data = {
             "uid": str(product.uid),
+            "pid": product.pid,
             "title": product.title,
             "status": product.status,
-            "pid": product.pid,
             "qr_code_data": product.qr_code_data,
             "farmer": {
                 "name": product.farmer.first_name,
@@ -469,15 +497,23 @@ class TraceProductAPIView(APIView):
             "tx_hash": product.tx_hash,
         }
         return Response(data, status=200)
-    
-    from rest_framework.decorators import api_view, permission_classes
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Product
 
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product
+
+# views.py
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def update_status(request, uid):
     """
     Updates the status of a product by its UID.
@@ -492,7 +528,6 @@ def update_status(request, uid):
     if not new_status:
         return Response({"detail": "Status is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Optionally, you can validate allowed statuses
     allowed_statuses = ["approved", "harvested", "in_transit", "delivered"]
     if new_status not in allowed_statuses:
         return Response({"detail": f"Invalid status. Allowed: {allowed_statuses}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -500,7 +535,397 @@ def update_status(request, uid):
     product.status = new_status
     product.save()
 
+    return Response({"uid": str(product.uid), "status": product.status})
+
+    print(f"🔹 Incoming request: method={request.method}, uid={uid}, data={request.data}")
+
+    try:
+        product = Product.objects.get(uid=uid)
+    except Product.DoesNotExist:
+        print(f"❌ Product not found for UID: {uid}")
+        return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    new_status = request.data.get("status")
+    if not new_status:
+        print(f"⚠️ No status provided in request")
+        return Response({"detail": "Status is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    allowed_statuses = ["approved", "harvested", "in_transit", "delivered"]
+    if new_status not in allowed_statuses:
+        print(f"⚠️ Invalid status: {new_status}")
+        return Response({"detail": f"Invalid status. Allowed: {allowed_statuses}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    product.status = new_status
+    product.save()
+
+    print(f"✅ Product {uid} status updated to {new_status}")
+    return Response({"uid": product.uid, "status": product.status})
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import Product
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_proof(request, uid):
+    product = Product.objects.get(uid=uid)
+    proof = request.data.get("proof")
+    public_signals = request.data.get("publicSignals")
+    
+    product.proof = proof
+    product.public_signals = public_signals
+    product.save()
+    return Response({"detail": "Proof saved successfully"})
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from users.models import Product, Transporter
+from products.serializers import ProductSerializer
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from logistics.models import Transporter
+from .models import Product
+from .serializers import ProductSerializer
+import traceback
+
+class ProductAllocateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, uid):  # ✅ Must match <uuid:uid> in your URL
+        try:
+            print("==== Product Allocate Request ====")
+            print("Request data:", request.data)
+            print("UID from URL:", uid)
+
+            product = get_object_or_404(Product, uid=uid)
+
+            transporter_id = request.data.get("transporter_id")
+            if not transporter_id:
+                return Response({"detail": "Transporter ID is required."}, status=400)
+
+            try:
+                transporter = Transporter.objects.get(id=transporter_id)
+            except Transporter.DoesNotExist:
+                return Response({"detail": "Transporter not found."}, status=404)
+
+            product.transporter = transporter
+            product.save()
+
+            return Response({
+                "message": f"Product '{product.title}' allocated to {transporter.user.email}",
+                "product": ProductSerializer(product).data
+            }, status=200)
+
+        except Exception as e:
+            print("==== ERROR TRACE ====")
+            traceback.print_exc()  # ✅ Full file + line trace in console
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# products/views.py
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product, TransportLocation
+from logistics.models import Transporter
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def allocate_product(request, uid):
+    """
+    Allocate a transporter to a product.
+    """
+    try:
+        product = Product.objects.get(uid=uid)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    transporter_id = request.data.get("transporter_id")
+    note = request.data.get("note", "")
+
+    if not transporter_id:
+        return Response({"detail": "Transporter ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        transporter = Transporter.objects.get(id=transporter_id)
+    except Transporter.DoesNotExist:
+        return Response({"detail": "Transporter not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Safe fetch of farmer location
+    farmer_location = getattr(getattr(product.farmer, 'farmer', None), 'location', None)
+    if not farmer_location:
+        return Response({"detail": "Farmer location not set"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Create TransportLocation entry or whatever logic you use
+    transport_record = TransportLocation.objects.create(
+        product=product,
+        transporter=transporter,
+        pickup=farmer_location,
+        note=note,
+    )
+
+    # Update product
+    product.transporter = transporter
+    product.transporter_note = note
+    product.save()
+
     return Response({
-        "uid": product.uid,
-        "status": product.status,
-    })
+        "detail": f"Product allocated to {transporter.name}",
+        "transporter": {
+            "id": transporter.id,
+            "name": transporter.name,
+            "vehicle": transporter.vehicle,
+            "license_plate": transporter.license_plate,
+        },
+        "pickup": farmer_location,
+        "note": note,
+    }, status=status.HTTP_200_OK)
+
+
+# helper function, not a view
+def load_abi():
+    path = os.getenv("CONTRACT_ABI_PATH")
+    if not path:
+        raise ValueError("CONTRACT_ABI_PATH not set")
+    with open(path, 'r') as f:
+        return json.load(f)["abi"]
+
+# === SETUP LOGGER ===
+logger = logging.getLogger('product_decision')
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+class ProductDecisionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, uid):
+        logger.info(f"DECISION REQUEST: UID={uid} | User={request.user.email} | Action={request.data.get('action')}")
+
+        # === AUTH CHECK ===
+        if not getattr(request.user, 'is_sacco_admin', False):
+            logger.warning(f"UNAUTHORIZED: {request.user.email} tried to decide on {uid}")
+            return Response({"detail": "SACCO Admin only"}, status=403)
+
+        product = get_object_or_404(Product, uid=uid)
+        action = request.data.get('action')
+        review = request.data.get('review', '')
+
+        logger.debug(f"Product: {product.title} | Current Status: {product.status}")
+
+        if action not in ['approve', 'reject']:
+            logger.error(f"INVALID ACTION: {action}")
+            return Response({'detail': 'Invalid action'}, status=400)
+
+        # === REJECT FLOW ===
+        if action == 'reject':
+            logger.info(f"REJECTING PRODUCT: {uid}")
+            product.status = 'rejected'
+            product.admin_reason = review
+            product.save()
+            logger.info(f"REJECTED: {uid} | Reason: {review}")
+            return Response({
+                "status": "rejected",
+                "admin_reason": review
+            })
+
+        # === APPROVE FLOW ===
+        logger.info(f"APPROVING PRODUCT: {uid}")
+        pid = f"FAIR-{product.uid.hex[:12].upper()}"
+        trace_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/trace/{uid}"
+
+        logger.debug(f"Generated PID: {pid}")
+        logger.debug(f"Trace URL: {trace_url}")
+
+        try:
+            # === WEB3 CONNECTION ===
+            logger.debug("Connecting to Web3...")
+            w3 = Web3(Web3.HTTPProvider(os.getenv('WEB3_PROVIDER')))
+            if not w3.is_connected():
+                raise Exception("Failed to connect to blockchain node")
+
+            logger.info("Web3 connected")
+
+            # === CONTRACT ===
+            contract_addr = Web3.to_checksum_address(os.getenv('PRODUCT_REGISTRY_ADDRESS'))
+            logger.debug(f"Contract Address: {contract_addr}")
+
+            contract = w3.eth.contract(address=contract_addr, abi=load_abi())
+            admin_addr = Web3.to_checksum_address(os.getenv('ADMIN_WALLET_ADDRESS'))
+            logger.debug(f"Admin Wallet: {admin_addr}")
+
+            # === NONCE & TX BUILD ===
+            nonce = w3.eth.get_transaction_count(admin_addr)
+            logger.debug(f"Nonce: {nonce}")
+
+            tx = contract.functions.registerProduct(
+                pid, product.title, product.farmer.email, trace_url
+            ).build_transaction({
+                'chainId': 1337,
+                'gas': 300000,
+                'gasPrice': w3.to_wei('2', 'gwei'),
+                'nonce': nonce,
+            })
+
+            logger.debug("Transaction built")
+
+            # === SIGN & SEND ===
+            signed = w3.eth.account.sign_transaction(tx, os.getenv('ADMIN_WALLET_PRIVATE_KEY'))
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hash_hex = tx_hash.hex()
+
+            logger.info(f"TX SENT: {tx_hash_hex}")
+            print(f"TX SENT: {tx_hash_hex}")  # Also print to raw console
+
+            # === WAIT FOR RECEIPT ===
+            logger.debug("Waiting for receipt...")
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash_hex, timeout=120)
+
+            if receipt.status != 1:
+                raise Exception(f"Transaction failed. Status: {receipt.status}")
+
+            logger.info(f"TX CONFIRMED: Block #{receipt.blockNumber}")
+            product.tx_hash = tx_hash_hex
+
+        except Exception as e:
+            logger.error("BLOCKCHAIN ERROR")
+            logger.error(f"Error: {str(e)}")
+            traceback.print_exc()
+            return Response({
+                "detail": "Blockchain registration failed",
+                "error": str(e)
+            }, status=500)
+
+        # === QR CODE GENERATION ===
+        try:
+            logger.debug("Generating QR code...")
+            qr = qrcode.make(trace_url)
+            buffer = io.BytesIO()
+            qr.save(buffer, format='PNG')
+            qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+            product.qr_code_data = f"data:image/png;base64,{qr_base64}"
+            logger.info("QR code generated")
+        except Exception as e:
+            logger.error("QR GENERATION FAILED")
+            logger.error(str(e))
+            traceback.print_exc()
+
+        # === FINAL SAVE ===
+        product.pid = pid
+        product.status = 'approved'
+        product.admin_reason = review
+        product.approved_at = timezone.now()
+        product.save()
+
+        logger.info(f"APPROVED: PID={pid} | TX={product.tx_hash}")
+
+        return Response({
+            "status": "approved",
+            "pid": pid,
+            "qr_code_data": product.qr_code_data,
+            "tx_hash": product.tx_hash,
+            "admin_reason": review
+        })
+        
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product
+from .serializers import AdminProductSerializer
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def sacco_admin_product_detail(request, uid):
+    """
+    Get a single product detail for SACCO admin.
+    """
+    try:
+        product = Product.objects.get(uid=uid)
+    except Product.DoesNotExist:
+        return Response({"detail": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = AdminProductSerializer(product)
+    return Response(serializer.data)
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product
+from .serializers import ProductSerializer
+
+from rest_framework.permissions import IsAuthenticated
+
+# products/views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from .models import Product
+from products.serializers import ProductSerializer
+
+
+import logging
+
+class ProductListAPIView(APIView):
+    """
+    GET  /api/products/  → List all products
+    POST /api/products/  → Create a new product (requires authentication)
+    """
+    permission_classes = [permissions.IsAuthenticated]  # require login
+
+    logger = logging.getLogger(__name__)
+
+    def get(self, request):
+        products = Product.objects.all().order_by('-created_at')
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        self.logger.debug(f"🟡 Incoming product data: {request.data}")
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            # ✅ attach the logged-in user as farmer
+            serializer.save(farmer=request.user)
+            self.logger.info("✅ Product created successfully")
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            self.logger.error(f"❌ Serializer errors: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class SaccoAdminDecisionAPIView(APIView):
+    permission_classes = [IsAuthenticated]  # only logged-in admins should access
+
+    def post(self, request, uid):
+        # Example: approve or decline product
+        try:
+            product = Product.objects.get(uid=uid)
+        except Product.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        decision = request.data.get("decision")  # expect "approved" or "declined"
+        reason = request.data.get("reason", "")
+
+        if decision not in ["approved", "declined"]:
+            return Response({"detail": "Invalid decision."}, status=status.HTTP_400_BAD_REQUEST)
+
+        product.status = decision
+        product.admin_reason = reason
+        product.save()
+
+        return Response({"detail": f"Product {decision} successfully."})
+

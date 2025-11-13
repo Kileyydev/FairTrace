@@ -1,176 +1,191 @@
 "use client";
 
 import React from "react";
-import { Box, Container, Typography } from "@mui/material";
-import { motion } from "framer-motion";
-import { Eye, ShieldCheck, Sprout } from "lucide-react";
+import { Box, Container, Typography, Divider } from "@mui/material";
+import { Eye, ShieldCheck, Sprout, Stamp, FileCheck } from "lucide-react";
 
-const features = [
+const complianceItems = [
   {
     title: "End-to-End Transparency",
-    description:
-      "Track every product's journey from farm to table with immutable blockchain records.",
-    icon: <Eye size={48} />,
+    
+    description: "Full visibility from origin to consumer with immutable zero-knowledge proofs.",
+    icon: <Eye size={38} />,
+    seal: "VERIFIED",
   },
   {
-    title: "Unmatched Security",
-    description:
-      "Blockchain-backed verification ensures every transaction is secure and tamper-proof.",
-    icon: <ShieldCheck size={48} />,
+    title: "Tamper-Proof Security",
+    
+    description: "Ethereum mainnet anchoring with 256-bit cryptographic guarantees.",
+    icon: <ShieldCheck size={38} />,
+    seal: "SECURED",
   },
   {
-    title: "Empowered Communities",
-    description:
-      "Enabling fair trade practices and improving livelihoods for farmers globally.",
-    icon: <Sprout size={48} />,
+    title: "Fair Trade Empowerment",
+    
+    description: "Direct farmer payments and community upliftment via smart contract escrow.",
+    icon: <Sprout size={38} />,
+    seal: "EMPOWERED",
   },
 ];
-
-const panelVariants = {
-  hidden: { opacity: 0, y: 30 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      delay: i * 0.15,
-      duration: 0.6,
-      ease: "easeOut",
-    },
-  }),
-};
 
 export default function AboutSection() {
   return (
     <Box
       sx={{
-        py: { xs: 6, md: 5 },
+        py: { xs: 10, md: 12 },
+        background: "#ffffff",
+        color: "#1a3c34",
+        borderTop: "4px double #1a3c34",
+        borderBottom: "4px double #1a3c34",
         position: "relative",
-        overflow: "hidden",
-        background: "linear-gradient(135deg, #0f2b22 0%, #1e4d3a 50%, #2f855a 100%)",
-        color: "#e0f2e9",
       }}
     >
-      {/* Subtle SVG Pattern Background */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "70%",
-          opacity: 0.08,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4e4d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundRepeat: "repeat",
-          zIndex: 0,
-        }}
-      />
+      <Container maxWidth="lg">
+        {/* Section Header */}
+        <Box sx={{ textAlign: "center", mb: 8 }}>
+          <Typography
+            variant="h3"
+            sx={{
+              fontFamily: '"Georgia", "Times New Roman", serif',
+              fontSize: { xs: "2.3rem", md: "3.2rem" },
+              fontWeight: 800,
+              letterSpacing: "-0.05em",
+              color: "#1a3c34",
+              mb: 1.5,
+            }}
+          >
+            FAIRTRACE COMPLIANCE FRAMEWORK
+          </Typography>
 
-      <Container maxWidth="lg" sx={{ position: "relative", zIndex: 2 }}>
+          <Divider
+            sx={{
+              width: 180,
+              mx: "auto",
+              borderBottomWidth: 3,
+              borderColor: "#1a3c34",
+            }}
+          />
+        </Box>
+
+        {/* Compliance Cards - ONE ROW (Horizontal on md+) */}
         <Box
           sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
-            gap: { xs: 3, md: 4 },
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            gap: { xs: 4, md: 2 }, // Tight spacing between cards
+            justifyContent: "center",
             alignItems: "stretch",
           }}
         >
-          {features.map((feature, index) => (
-            <motion.div
+          {complianceItems.map((item, index) => (
+            <Box
               key={index}
-              custom={index}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={panelVariants}
-              style={{ height: "100%" }}
+              sx={{
+                flex: { md: 1 },
+                minWidth: 0,
+                p: { xs: 4, md: 4.5 },
+                background: "#ffffff",
+                border: "3px double #1a3c34",
+                position: "relative",
+                boxShadow: "0 14px 45px rgba(26, 60, 52, 0.14)", // Stronger shadow
+                transition: "none",
+              }}
             >
+              {/* Official Seal */}
               <Box
                 sx={{
-                  height: "100%",
-                  p: { xs: 3.5, md: 4.5 },
-                  background: "rgba(30, 58, 47, 0.68)",
-                  backdropFilter: "blur(16px)",
-                  WebkitBackdropFilter: "blur(16px)",
-                  border: "1px solid rgba(224, 242, 233, 0.18)",
-                  borderRadius: 0,
-                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                  transition: "all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)",
-                  position: "relative",
-                  overflow: "hidden",
-                  
+                  position: "absolute",
+                  top: -16,
+                  right: 16,
+                  width: 62,
+                  height: 62,
+                  border: "5px double #1a3c34",
+                  borderRadius: "50%",
+                  bgcolor: "#ffffff",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.5rem",
+                  fontWeight: 800,
+                  color: "#1a3c34",
+                  boxShadow: "0 6px 20px rgba(26, 60, 52, 0.2)",
+                  zIndex: 10,
                 }}
               >
-                {/* Glow Effect Behind Icon */}
-                <Box
-                  className="icon-glow"
-                  sx={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                    width: 80,
-                    height: 80,
-                    borderRadius: "50%",
-                    background: "radial-gradient(circle, rgba(47, 133, 90, 0.2) 0%, transparent 70%)",
-                    opacity: 0.5,
-                    transition: "all 0.4s ease",
-                    pointerEvents: "none",
-                  }}
-                />
+                <Stamp size={20} strokeWidth={3} />
+                {item.seal}
+              </Box>
 
-                {/* Icon */}
+
+              {/* Icon + Title */}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 3, mb: 2.5 }}>
                 <Box
                   sx={{
-                    mb: 3,
+                    p: 2.5,
+                    background: "linear-gradient(135deg, #f5f9f6 0%, #e8f5e9 100%)",
+                    border: "3px double #1a3c34",
+                    borderRadius: "50%",
                     display: "flex",
+                    alignItems: "center",
                     justifyContent: "center",
-                    position: "relative",
-                    zIndex: 1,
+                    flexShrink: 0,
+                    width: 76,
+                    height: 76,
                   }}
                 >
-                  <Box
-                    sx={{
-                      p: 2,
-                      background: "rgba(47, 133, 90, 0.15)",
-                      borderRadius: "50%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    <Box sx={{ color: "#2f855a" }}>{feature.icon}</Box>
-                  </Box>
+                  <Box sx={{ color: "#1a3c34" }}>{item.icon}</Box>
                 </Box>
 
-                {/* Text */}
                 <Typography
-                  variant="h6"
-                  fontWeight={700}
-                  gutterBottom
+                  variant="h5"
                   sx={{
-                    color: "#ffffff",
-                    fontSize: { xs: "1.1rem", md: "1.25rem" },
-                    letterSpacing: "-0.3px",
-                    lineHeight: 1.3,
+                    fontFamily: '"Georgia", serif',
+                    fontSize: { xs: "1.35rem", md: "1.5rem" },
+                    fontWeight: 800,
+                    color: "#1a3c34",
+                    lineHeight: 1.2,
+                    flex: 1,
                   }}
                 >
-                  {feature.title}
-                </Typography>
-
-                <Typography
-                  variant="body1"
-                  sx={{
-                    color: "#c8e6d3",
-                    fontSize: { xs: "0.95rem", md: "1rem" },
-                    lineHeight: 1.7,
-                    opacity: 0.95,
-                  }}
-                >
-                  {feature.description}
+                  {item.title}
                 </Typography>
               </Box>
-            </motion.div>
+
+              {/* Description */}
+              <Typography
+                sx={{
+                  fontSize: "1rem",
+                  lineHeight: 1.7,
+                  color: "#1a3c34",
+                  opacity: 0.92,
+                  pl: { xs: 0, md: 11.5 }, // Align with icon text
+                }}
+              >
+                {item.description}
+              </Typography>
+
+              {/* Certified Badge */}
+              <Box sx={{ mt: 3.5, textAlign: "right" }}>
+                <Box
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 1,
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    color: "#2f855a",
+                    border: "2px solid #2f855a",
+                    px: 1.8,
+                    py: 0.5,
+                    borderRadius: "6px",
+                  }}
+                >
+                  <FileCheck size={17} strokeWidth={2.5} />
+                  CERTIFIED
+                </Box>
+              </Box>
+            </Box>
           ))}
         </Box>
       </Container>

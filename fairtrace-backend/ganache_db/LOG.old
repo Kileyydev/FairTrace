@@ -1,9 +1,5 @@
-2025/11/11-17:56:42.450 2b9c Recovering log #15
-2025/11/11-17:56:42.450 2b9c Level-0 table #18: started
-2025/11/11-17:56:42.454 2b9c Level-0 table #18: 5255 bytes OK
-2025/11/11-17:56:42.474 2b9c Delete type=2 #5
-2025/11/11-17:56:42.477 2b9c Delete type=2 #8
-2025/11/11-17:56:42.477 2b9c Delete type=2 #11
-2025/11/11-17:56:42.477 2b9c Delete type=2 #14
-2025/11/11-17:56:42.477 2b9c Delete type=0 #15
-2025/11/11-17:56:42.477 2b9c Delete type=3 #13
+2025/11/13-11:55:41.201 3e34 Recovering log #22
+2025/11/13-11:55:41.201 3e34 Level-0 table #24: started
+2025/11/13-11:55:41.214 3e34 Level-0 table #24: 9442 bytes OK
+2025/11/13-11:55:41.227 3e34 Delete type=0 #22
+2025/11/13-11:55:41.227 3e34 Delete type=3 #20

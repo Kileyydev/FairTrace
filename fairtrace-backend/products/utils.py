@@ -26,3 +26,19 @@ def create_qr_data_url(pid: str, base_url="http://localhost:3000/record"):
     img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     return f"data:image/png;base64,{b64}"
+
+
+import json
+import os
+
+def load_abi():
+    """
+    Load the smart contract ABI from a JSON file.
+    Assumes the ABI is stored in `products/abi/ProductRegistry.json`.
+    """
+    abi_path = os.path.join(os.path.dirname(__file__), 'abi', 'ProductRegistry.json')
+    if not os.path.exists(abi_path):
+        raise FileNotFoundError(f"ABI file not found at {abi_path}")
+    with open(abi_path, 'r') as f:
+        abi = json.load(f)
+    return abi

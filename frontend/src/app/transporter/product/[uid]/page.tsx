@@ -115,7 +115,9 @@ export default function TransporterView({ params }: { params: { uid: string } })
           overflow: "hidden",
         }}
       >
-        <TopNavBar sx={{ zIndex: 1300, position: "fixed", top: 0, width: "100%" }} />
+        <Box sx={{ zIndex: 1300, position: "fixed", top: 0, width: "100%" }}>
+          <TopNavBar />
+        </Box>
         <Box
           sx={{
             position: "absolute",
@@ -209,7 +211,9 @@ export default function TransporterView({ params }: { params: { uid: string } })
             </Box>
           </motion.div>
         </Container>
-        <Footer sx={{ position: "relative", zIndex: 1300, mt: "auto" }} />
+        <Box sx={{ position: "relative", zIndex: 1300, mt: "auto" }}>
+          <Footer />
+        </Box>
       </Box>
     </ThemeProvider>
   );

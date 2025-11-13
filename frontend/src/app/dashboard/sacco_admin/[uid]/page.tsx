@@ -1,25 +1,39 @@
+// app/dashboard/sacco_admin/[uid]/page.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
 import {
   Box,
+  Container,
   Typography,
   CircularProgress,
   Button,
   TextField,
-  Paper,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TableContainer,
-  Container,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Avatar,
 } from "@mui/material";
+import { Stamp, LogOut, CheckCircle, XCircle } from "lucide-react";
+import CloseIcon from "@mui/icons-material/Close";
+import LocalShipping from "@mui/icons-material/LocalShipping";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { jwtDecode } from "jwt-decode";
 
 interface Farmer {
   first_name: string;
@@ -36,6 +50,15 @@ interface ProductStage {
   scanned_qr: boolean;
 }
 
+interface Transporter {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  vehicle: string;
+  license_plate: string;
+}
+
 interface Product {
   uid: string;
   title: string;
@@ -48,6 +71,14 @@ interface Product {
   images?: string[];
   farmer: Farmer;
   stages?: ProductStage[];
+  transporter?: Transporter | null;
+  transporter_note?: string;
+  pid?: string;
+}
+
+interface AdminUser {
+  id: number;
+  name: string;
 }
 
 export default function ProductDetails() {
@@ -57,12 +88,20 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [review, setReview] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [transporters, setTransporters] = useState<Transporter[]>([]);
+  const [selectedTransporter, setSelectedTransporter] = useState<number | "">("");
+  const [transporterNote, setTransporterNote] = useState("");
+  const [allocating, setAllocating] = useState(false);
+  const [showAllocationDialog, setShowAllocationDialog] = useState(false);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
   const getValidAccessToken = async (): Promise<string | null> => {
     let token = localStorage.getItem("access");
     const refresh = localStorage.getItem("refresh");
     if (!token && refresh) {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+      const res = await fetch(`${API_BASE}/token/refresh/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh }),
@@ -84,12 +123,9 @@ export default function ProductDetails() {
     }
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${uid}/`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await fetch(`${API_BASE}/sacco_admin/products/${uid}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       if (!res.ok) {
         setError("Failed to fetch product details");
@@ -107,6 +143,23 @@ export default function ProductDetails() {
     }
   };
 
+  const fetchTransporters = async () => {
+    const token = await getValidAccessToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/transporters/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTransporters(data);
+      }
+    } catch (err) {
+      console.error("Failed to load transporters", err);
+    }
+  };
+
   const handleAction = async (action: "approve" | "reject") => {
     setError(null);
     const token = await getValidAccessToken();
@@ -114,7 +167,7 @@ export default function ProductDetails() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
+        `${API_BASE}/sacco_admin/products/${product.uid}/decision/`,
         {
           method: "POST",
           headers: {
@@ -136,6 +189,7 @@ export default function ProductDetails() {
 
       if (data.status === "approved") {
         alert("Product approved. PID: " + data.pid);
+        fetchTransporters();
       } else {
         alert("Product rejected.");
       }
@@ -145,169 +199,434 @@ export default function ProductDetails() {
     }
   };
 
+  const handleAllocate = async () => {
+    if (!selectedTransporter || !product) return;
+
+    setAllocating(true);
+    const token = await getValidAccessToken();
+    if (!token) {
+      setError("Authentication failed");
+      setAllocating(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/products/${product.uid}/allocate/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            transporter_id: selectedTransporter,
+            note: transporterNote,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.detail || "Allocation failed");
+        return;
+      }
+
+      const data = await res.json();
+      setProduct((prev) => ({ ...(prev as Product), ...data }));
+      setShowAllocationDialog(false);
+      alert("Product allocated to transporter!");
+    } catch (err) {
+      setError("Network error");
+    } finally {
+      setAllocating(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
   useEffect(() => {
+    const token = localStorage.getItem("access");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+    try {
+      const decoded: any = jwtDecode(token);
+      if (!decoded.is_sacco_admin) {
+        window.location.href = "/dashboard";
+        return;
+      }
+      setAdmin({ id: decoded.user_id, name: decoded.name || "Admin" });
+    } catch (err) {
+      localStorage.clear();
+      window.location.href = "/login";
+    }
     fetchProduct();
   }, [uid]);
 
-  // Animation variants
-  const fadeInUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
-  };
+  useEffect(() => {
+    if (product?.status === "approved" && !product.transporter) {
+      fetchTransporters();
+    }
+  }, [product?.status]);
 
   return (
     <Box
       sx={{
-        background: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)",
         minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
+        background: "#ffffff",
+        color: "#1a3c34",
+        borderTop: "4px double #1a3c34",
+        borderBottom: "4px double #1a3c34",
         position: "relative",
-        overflow: "hidden",
       }}
     >
       <TopNavBar />
+
+      {/* Profile Top Right */}
+      {admin && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 100,
+            right: { xs: 16, md: 32 },
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 1,
+            zIndex: 10,
+          }}
+        >
+          <Avatar
+            sx={{
+              width: 72,
+              height: 72,
+              bgcolor: "#1a3c34",
+              fontSize: "2rem",
+              fontWeight: 800,
+              border: "4px double #2f855a",
+              boxShadow: "0 6px 20px rgba(26,60,52,0.2)",
+            }}
+          >
+            {admin.name.charAt(0)}
+          </Avatar>
+          <Typography
+            sx={{
+              fontFamily: '"Georgia", serif',
+              fontSize: "1.1rem",
+              fontWeight: 800,
+              color: "#1a3c34",
+            }}
+          >
+            {admin.name}
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              color: "#2f855a",
+              textTransform: "uppercase",
+              letterSpacing: "1.2px",
+            }}
+          >
+            SACCO ADMIN
+          </Typography>
+        </Box>
+      )}
+
+      {/* Logout Bottom Right */}
       <Box
         sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.1,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232f855a' fill-opacity='0.3' fill-rule='evenodd'%3E%3Cpath d='M0 0h60v60H0z'/%3E%3Cpath d='M30 30l15 15-15 15-15-15z'/%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundRepeat: "repeat",
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          zIndex: 1000,
         }}
-      />
-      <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 }, flexGrow: 1 }}>
-        <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
-          {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress sx={{ color: "#2f855a" }} />
-            </Box>
-          ) : error ? (
-            <Typography
-              color="error"
-              sx={{ fontSize: "0.9rem", fontWeight: "500", textAlign: "center" }}
-            >
-              {error}
-            </Typography>
-          ) : product ? (
+      >
+        <Button
+          variant="contained"
+          startIcon={<LogOut size={18} />}
+          onClick={handleLogout}
+          sx={{
+            background: "#c62828",
+            color: "#fff",
+            fontWeight: 700,
+            py: 1.5,
+            px: 3,
+            borderRadius: 0,
+            boxShadow: "0 8px 24px rgba(198,40,40,0.35)",
+            "&:hover": { background: "#b71c1c" },
+          }}
+        >
+          Logout
+        </Button>
+      </Box>
+
+      <Container maxWidth="md" sx={{ py: { xs: 10, md: 12 }, pb: 16 }}>
+        {/* Header */}
+        <Box sx={{ textAlign: "center", mb: 6 }}>
+          <Typography
+            sx={{
+              fontFamily: '"Georgia", serif',
+              fontSize: { xs: "2.3rem", md: "3.2rem" },
+              fontWeight: 800,
+              letterSpacing: "-0.05em",
+              color: "#1a3c34",
+              mb: 1,
+            }}
+          >
+            PRODUCT CERTIFICATE
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.95rem",
+              fontWeight: 600,
+              color: "#2f855a",
+              letterSpacing: "2.2px",
+              textTransform: "uppercase",
+            }}
+          >
+            FairTrace Authority • Official Record
+          </Typography>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ textAlign: "center", py: 10 }}>
+            <CircularProgress size={56} sx={{ color: "#2f855a" }} />
+          </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ mb: 3, fontWeight: 600 }}>
+            {error}
+          </Alert>
+        ) : product ? (
+          <Box
+            sx={{
+              background: "#ffffff",
+              border: "4px double #1a3c34",
+              boxShadow: "0 16px 50px rgba(26, 60, 52, 0.16)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            {/* Official Seal */}
             <Box
               sx={{
-                background: "rgba(255, 255, 255, 0.9)",
-                borderRadius: 3,
-                boxShadow: "0 6px 24px rgba(0, 0, 0, 0.15)",
-                backdropFilter: "blur(10px)",
-                p: { xs: 3, md: 4 },
+                position: "absolute",
+                top: -18,
+                right: 18,
+                width: 72,
+                height: 72,
+                border: "5px double #1a3c34",
+                borderRadius: "50%",
+                bgcolor: "#ffffff",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "0.52rem",
+                fontWeight: 800,
+                color: "#1a3c34",
+                boxShadow: "0 8px 24px rgba(26, 60, 52, 0.22)",
+                zIndex: 10,
               }}
             >
+              <Stamp style={{ fontSize: 24 }} />
+              CERTIFIED<br />PRODUCT
+            </Box>
+
+            <Box sx={{ p: { xs: 4, md: 6 } }}>
+              {/* Title */}
               <Typography
-                variant="h4"
-                fontWeight="800"
                 sx={{
-                  color: "#1e3a2f",
+                  fontFamily: '"Georgia", serif',
+                  fontSize: { xs: "1.8rem", md: "2.4rem" },
+                  fontWeight: 800,
+                  color: "#1a3c34",
                   mb: 2,
-                  fontSize: { xs: "1.8rem", md: "2.2rem" },
-                  background: "linear-gradient(90deg, #1e3a2f 0%, #2f855a 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
+                  textAlign: "center",
                 }}
               >
                 {product.title} ({product.variety})
               </Typography>
+
+              {/* Status & PID */}
+              <Box sx={{ display: "flex", justifyContent: "center", gap: 2, mb: 4 }}>
+                <Box
+                  sx={{
+                    bgcolor:
+                      product.status === "pending"
+                        ? "#fff3e0"
+                        : product.status === "approved"
+                        ? "#e8f5e9"
+                        : "#ffebee",
+                    color:
+                      product.status === "pending"
+                        ? "#ef6c00"
+                        : product.status === "approved"
+                        ? "#2e7d32"
+                        : "#c62828",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    px: 2,
+                    py: 0.8,
+                    borderRadius: 1,
+                  }}
+                >
+                  STATUS: {product.status.toUpperCase()}
+                </Box>
+                {product.pid && (
+                  <Box
+                    sx={{
+                      bgcolor: "#e3f2fd",
+                      color: "#1565c0",
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                      px: 2,
+                      py: 0.8,
+                      borderRadius: 1,
+                    }}
+                  >
+                    PID: {product.pid}
+                  </Box>
+                )}
+              </Box>
+
+              {/* Description */}
               <Typography
-                variant="body1"
-                sx={{ color: "#4a6b5e", mb: 3, fontSize: "0.95rem" }}
+                sx={{
+                  color: "#1a3c34",
+                  fontSize: "1rem",
+                  lineHeight: 1.6,
+                  mb: 4,
+                  textAlign: "center",
+                  fontStyle: "italic",
+                }}
               >
                 {product.description}
               </Typography>
 
-              <Box sx={{ mb: 3 }}>
+              {/* Farmer Card */}
+              <Box
+                sx={{
+                  border: "3px double #1a3c34",
+                  background: "#f8faf9",
+                  p: 3,
+                  mb: 4,
+                  position: "relative",
+                }}
+              >
                 <Typography
-                  variant="h6"
-                  sx={{ color: "#1e3a2f", fontWeight: "700", fontSize: "1.1rem", mb: 1 }}
+                  sx={{
+                    fontFamily: '"Courier New", monospace',
+                    fontWeight: 800,
+                    color: "#2f855a",
+                    fontSize: "1rem",
+                    mb: 2,
+                    textAlign: "center",
+                    letterSpacing: "1px",
+                  }}
                 >
-                  Farmer Info
+                  FARMER INFORMATION
                 </Typography>
-                <Box sx={{ background: "rgba(47, 133, 90, 0.05)", borderRadius: 2, p: 2 }}>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
-                    Name: {product.farmer.first_name}
+                <Box sx={{ pl: 2 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+                    Name: <strong>{product.farmer.first_name}</strong>
                   </Typography>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
+                  <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
                     Email: {product.farmer.email}
                   </Typography>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
+                  <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
                     Phone: {product.farmer.phone_number}
                   </Typography>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
+                  <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
                     Location: {product.farmer.location}
                   </Typography>
                 </Box>
               </Box>
 
-              <Box sx={{ mb: 3 }}>
-                <Typography
-                  variant="h6"
-                  sx={{ color: "#1e3a2f", fontWeight: "700", fontSize: "1.1rem", mb: 1 }}
-                >
-                  Product Info
-                </Typography>
-                <Box sx={{ background: "rgba(47, 133, 90, 0.05)", borderRadius: 2, p: 2 }}>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
-                    Quantity: {product.quantity}
+              {/* Product Info */}
+              <Box sx={{ display: "flex", justifyContent: "center", gap: 4, mb: 4 }}>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography sx={{ fontWeight: 700, color: "#1a3c34", fontSize: "1.1rem" }}>
+                    {product.quantity}
                   </Typography>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
-                    Acreage: {product.acres}
-                  </Typography>
-                  <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem" }}>
-                    Status: {product.status}
-                  </Typography>
+                  <Typography sx={{ color: "#666", fontSize: "0.85rem" }}>QUANTITY</Typography>
                 </Box>
-                {product.qr_code_data && (
-                  <Box sx={{ mt: 2, textAlign: "center" }}>
-                    <Typography sx={{ color: "#1e3a2f", fontWeight: "600", fontSize: "1rem", mb: 1 }}>
-                      QR Code
-                    </Typography>
-                    <Box
-                      sx={{
-                        borderRadius: 2,
-                        overflow: "hidden",
-                        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                        display: "inline-block",
-                      }}
-                    >
-                      <img
-                        src={product.qr_code_data}
-                        alt="QR Code"
-                        style={{ width: "150px", height: "150px", objectFit: "cover" }}
-                      />
-                    </Box>
-                  </Box>
-                )}
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography sx={{ fontWeight: 700, color: "#1a3c34", fontSize: "1.1rem" }}>
+                    {product.acres}
+                  </Typography>
+                  <Typography sx={{ color: "#666", fontSize: "0.85rem" }}>ACRES</Typography>
+                </Box>
               </Box>
 
-              {product.images?.length ? (
-                <Box sx={{ mb: 3 }}>
+              {/* QR Code */}
+              {product.qr_code_data && (
+                <Box sx={{ textAlign: "center", mb: 4 }}>
                   <Typography
-                    variant="h6"
-                    sx={{ color: "#1e3a2f", fontWeight: "700", fontSize: "1.1rem", mb: 1 }}
+                    sx={{
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#2f855a",
+                      fontSize: "1rem",
+                      mb: 2,
+                      letterSpacing: "1px",
+                    }}
                   >
-                    Images
+                    OFFICIAL QR CODE
                   </Typography>
-                  <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+                  <Box
+                    sx={{
+                      display: "inline-block",
+                      p: 2,
+                      border: "3px double #1a3c34",
+                      background: "#fff",
+                      borderRadius: 2,
+                    }}
+                  >
+                    <img
+                      src={product.qr_code_data}
+                      alt="QR Code"
+                      style={{ width: "160px", height: "160px" }}
+                    />
+                  </Box>
+                </Box>
+              )}
+
+              {/* Images */}
+              {product.images?.length ? (
+                <Box sx={{ mb: 4 }}>
+                  <Typography
+                    sx={{
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#2f855a",
+                      fontSize: "1rem",
+                      mb: 2,
+                      textAlign: "center",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    PRODUCT IMAGES
+                  </Typography>
+                  <Box sx={{ display: "flex", justifyContent: "center", gap: 2, flexWrap: "wrap" }}>
                     {product.images.map((img, i) => (
                       <Box
                         key={i}
                         sx={{
-                          borderRadius: 2,
+                          border: "2px solid #1a3c34",
+                          borderRadius: 1,
                           overflow: "hidden",
-                          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                          boxShadow: "0 4px 12px rgba(26,60,52,0.15)",
                         }}
                       >
                         <img
                           src={img}
-                          alt={`Product ${i}`}
+                          alt={`Product ${i + 1}`}
                           style={{ width: "120px", height: "120px", objectFit: "cover" }}
                         />
                       </Box>
@@ -316,57 +635,40 @@ export default function ProductDetails() {
                 </Box>
               ) : null}
 
+              {/* Stages Table */}
               {product.stages?.length ? (
-                <Box sx={{ mb: 3 }}>
+                <Box sx={{ mb: 4 }}>
                   <Typography
-                    variant="h6"
-                    sx={{ color: "#1e3a2f", fontWeight: "700", fontSize: "1.1rem", mb: 1 }}
-                  >
-                    Stages
-                  </Typography>
-                  <TableContainer
-                    component={Paper}
                     sx={{
-                      borderRadius: 2,
-                      background: "rgba(255, 255, 255, 0.7)",
-                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#2f855a",
+                      fontSize: "1rem",
+                      mb: 2,
+                      textAlign: "center",
+                      letterSpacing: "1px",
                     }}
                   >
+                    SUPPLY CHAIN STAGES
+                  </Typography>
+                  <TableContainer sx={{ border: "2px solid #1a3c34" }}>
                     <Table size="small">
                       <TableHead>
-                        <TableRow
-                          sx={{
-                            background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)",
-                          }}
-                        >
-                          <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                            Stage
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                            Quantity
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                            Location
-                          </TableCell>
-                          <TableCell sx={{ fontWeight: "600", color: "#1e3a2f", fontSize: "0.8rem" }}>
-                            QR Scanned
-                          </TableCell>
+                        <TableRow sx={{ background: "#f8faf9" }}>
+                          <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Stage</TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Qty</TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Location</TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>QR</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {product.stages.map((stage) => (
                           <TableRow key={stage.id}>
-                            <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                              {stage.stage_name}
-                            </TableCell>
-                            <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                              {stage.quantity}
-                            </TableCell>
-                            <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                              {stage.location}
-                            </TableCell>
-                            <TableCell sx={{ color: "#4a6b5e", fontSize: "0.75rem" }}>
-                              {stage.scanned_qr ? "Yes" : "No"}
+                            <TableCell sx={{ color: "#1a3c34" }}>{stage.stage_name}</TableCell>
+                            <TableCell sx={{ color: "#1a3c34" }}>{stage.quantity}</TableCell>
+                            <TableCell sx={{ color: "#1a3c34" }}>{stage.location}</TableCell>
+                            <TableCell sx={{ color: stage.scanned_qr ? "#2f855a" : "#c62828", fontWeight: 700 }}>
+                              {stage.scanned_qr ? "YES" : "NO"}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -376,83 +678,217 @@ export default function ProductDetails() {
                 </Box>
               ) : null}
 
-              <Box>
-                <Typography
-                  variant="h6"
-                  sx={{ color: "#1e3a2f", fontWeight: "700", fontSize: "1.1rem", mb: 1 }}
-                >
-                  Admin Review
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={review}
-                  onChange={(e) => setReview(e.target.value)}
+              {/* Transporter Info */}
+              {product.transporter && (
+                <Box
                   sx={{
-                    mb: 2,
-                    "& .MuiOutlinedInput-root": {
-                      borderRadius: 2,
-                      background: "rgba(255, 255, 255, 0.7)",
-                      "& fieldset": { borderColor: "#c4d8c9" },
-                      "&:hover fieldset": { borderColor: "#2f855a" },
-                      "&.Mui-focused fieldset": { borderColor: "#276749" },
-                    },
-                    "& .MuiInputLabel-root": { color: "#4a6b5e" },
-                    "& .MuiInputLabel-root.Mui-focused": { color: "#276749" },
+                    border: "3px double #2f855a",
+                    background: "#f8faf9",
+                    p: 3,
+                    mb: 4,
                   }}
-                />
-                <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end" }}>
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                >
+                  <Typography
+                    sx={{
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#2f855a",
+                      fontSize: "1rem",
+                      mb: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <LocalShipping sx={{ fontSize: 20 }} /> TRANSPORTER ASSIGNED
+                  </Typography>
+                  <Box sx={{ pl: 2 }}>
+                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+                      Name: <strong>{product.transporter.name}</strong>
+                    </Typography>
+                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+                      Vehicle: {product.transporter.vehicle} ({product.transporter.license_plate})
+                    </Typography>
+                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+                      Phone: {product.transporter.phone}
+                    </Typography>
+                    {product.transporter_note && (
+                      <Box sx={{ mt: 2, p: 2, background: "#fff", borderLeft: "4px solid #2f855a" }}>
+                        <Typography sx={{ fontStyle: "italic", color: "#2e7d32", fontSize: "0.9rem" }}>
+                          "{product.transporter_note}"
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Admin Review */}
+              {product.status === "pending" && (
+                <Box sx={{ mb: 4 }}>
+                  <Typography
+                    sx={{
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#2f855a",
+                      fontSize: "1rem",
+                      mb: 2,
+                      textAlign: "center",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    ADMIN REVIEW
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    value={review}
+                    onChange={(e) => setReview(e.target.value)}
+                    placeholder="Enter review comments..."
+                    sx={{
+                      mb: 3,
+                      "& .MuiInputBase-root": { background: "#f8faf9" },
+                      "& .MuiInputLabel-root": { color: "#1a3c34", fontWeight: 600 },
+                    }}
+                  />
+                  <Box sx={{ display: "flex", gap: 1.5, justifyContent: "center" }}>
                     <Button
                       variant="contained"
-                      size="small"
+                      startIcon={<CheckCircle size={18} />}
                       onClick={() => handleAction("approve")}
                       sx={{
-                        background: "linear-gradient(45deg, #2f855a 0%, #4caf50 100%)",
-                        color: "#ffffff",
-                        textTransform: "none",
-                        fontWeight: "600",
-                        borderRadius: 2,
-                        px: 3,
-                        "&:hover": {
-                          background: "linear-gradient(45deg, #276749 0%, #388e3c 100%)",
-                        },
+                        background: "#2f855a",
+                        fontWeight: 700,
+                        py: 1.5,
+                        borderRadius: 0,
+                        boxShadow: "0 8px 24px rgba(47,133,90,0.35)",
                       }}
                     >
                       Approve
                     </Button>
-                  </motion.div>
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Button
                       variant="contained"
-                      size="small"
+                      startIcon={<XCircle size={18} />}
                       onClick={() => handleAction("reject")}
                       sx={{
-                        background: "linear-gradient(45deg, #d32f2f 0%, #b71c1c 100%)",
-                        color: "#ffffff",
-                        textTransform: "none",
-                        fontWeight: "600",
-                        borderRadius: 2,
-                        px: 3,
-                        "&:hover": {
-                          background: "linear-gradient(45deg, #b71c1c 0%, #9a0007 100%)",
-                        },
+                        background: "#c62828",
+                        fontWeight: 700,
+                        py: 1.5,
+                        borderRadius: 0,
+                        boxShadow: "0 8px 24px rgba(198,40,40,0.35)",
                       }}
                     >
                       Reject
                     </Button>
-                  </motion.div>
+                  </Box>
                 </Box>
-              </Box>
+              )}
+
+              {/* Allocate Transporter */}
+              {product.status === "approved" && !product.transporter && (
+                <Box sx={{ textAlign: "center" }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<LocalShipping fontSize="small" />}
+                    onClick={() => setShowAllocationDialog(true)}
+                    sx={{
+                      background: "#2f855a",
+                      fontWeight: 700,
+                      py: 1.8,
+                      px: 4,
+                      borderRadius: 0,
+                      boxShadow: "0 8px 24px rgba(47,133,90,0.35)",
+                    }}
+                  >
+                    Assign Transporter
+                  </Button>
+                </Box>
+              )}
             </Box>
-          ) : (
-            <Typography sx={{ color: "#4a6b5e", fontSize: "0.9rem", textAlign: "center" }}>
-              No product found
-            </Typography>
-          )}
-        </motion.div>
+          </Box>
+        ) : (
+          <Typography sx={{ textAlign: "center", py: 10, fontSize: "1.2rem", color: "#666" }}>
+            No product found.
+          </Typography>
+        )}
       </Container>
+
+      {/* Allocation Dialog */}
+      <Dialog open={showAllocationDialog} onClose={() => setShowAllocationDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle
+          sx={{
+            background: "#1a3c34",
+            color: "#fff",
+            fontWeight: 800,
+            fontFamily: '"Georgia", serif',
+            py: 2,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          ASSIGN TRANSPORTER
+          <IconButton onClick={() => setShowAllocationDialog(false)} sx={{ color: "#fff" }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 4, background: "#f8faf9" }}>
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel sx={{ color: "#1a3c34", fontWeight: 600 }}>Select Transporter</InputLabel>
+            <Select
+              value={selectedTransporter}
+              onChange={(e) => setSelectedTransporter(e.target.value as number)}
+              label="Select Transporter"
+              sx={{ background: "#fff" }}
+            >
+              {transporters.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.name} — {t.vehicle} ({t.license_plate})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Note to Transporter"
+            value={transporterNote}
+            onChange={(e) => setTransporterNote(e.target.value)}
+            placeholder="e.g., Deliver to Nairobi by Friday. Contact farmer at 8 AM."
+            sx={{
+              "& .MuiInputBase-root": { background: "#fff" },
+              "& .MuiInputLabel-root": { color: "#1a3c34", fontWeight: 600 },
+            }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 3, background: "#f8faf9", justifyContent: "center" }}>
+          <Button
+            onClick={() => setShowAllocationDialog(false)}
+            disabled={allocating}
+            sx={{ color: "#1a3c34", fontWeight: 700 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAllocate}
+            disabled={!selectedTransporter || allocating}
+            sx={{
+              background: "#2f855a",
+              color: "#fff",
+              fontWeight: 700,
+              px: 4,
+              borderRadius: 0,
+            }}
+          >
+            {allocating ? <CircularProgress size={20} color="inherit" /> : "Assign"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Footer />
     </Box>
   );

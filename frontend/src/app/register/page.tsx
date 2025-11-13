@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -6,25 +7,22 @@ import {
   Typography,
   TextField,
   Button,
-  Tabs,
-  Tab,
+  Stepper,
+  Step,
+  StepLabel,
   CircularProgress,
   Alert,
   Snackbar,
   IconButton,
-  Stepper,
-  Step,
-  StepLabel,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Close as CloseIcon, ArrowForward, ArrowBack } from "@mui/icons-material";
 import dynamic from "next/dynamic";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapEvents } from "react-leaflet";
 import TopNavBar from "../components/TopNavBar";
 import Footer from "../components/FooterSection";
+import { Stamp, MapPin } from "lucide-react";
 
 // Leaflet icon fix
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -84,14 +82,6 @@ function LocationMarker({ setPosition }: { setPosition: React.Dispatch<React.Set
   return null;
 }
 
-function TabPanel({ children, value, index }: { children: React.ReactNode; value: number; index: number }) {
-  return (
-    <div role="tabpanel" hidden={value !== index}>
-      {value === index && <Box sx={{ pt: 4, pb: 2 }}>{children}</Box>}
-    </div>
-  );
-}
-
 const steps = ["Personal Info", "Farm Details", "Account Setup"];
 
 export default function RegisterPage() {
@@ -115,8 +105,6 @@ export default function RegisterPage() {
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // Success Snackbar
   const [snackOpen, setSnackOpen] = useState(false);
   const [txHash, setTxHash] = useState<string>("");
 
@@ -202,23 +190,12 @@ export default function RegisterPage() {
         return;
       }
 
-      // Success!
       setTxHash(data.tx_hash || "N/A");
       setSnackOpen(true);
-      // Optionally reset form
       setFormData({
-        fullName: "",
-        nationalId: "",
-        phone: "",
-        email: "",
-        farmAddress: "",
-        gpsLat: "",
-        gpsLong: "",
-        farmSize: "",
-        mainCrops: "",
-        saccoMembership: "",
-        password: "",
-        confirmPassword: "",
+        fullName: "", nationalId: "", phone: "", email: "", farmAddress: "",
+        gpsLat: "", gpsLong: "", farmSize: "", mainCrops: "", saccoMembership: "",
+        password: "", confirmPassword: "",
       });
       setActiveStep(0);
     } catch (err: any) {
@@ -235,115 +212,337 @@ export default function RegisterPage() {
   }, []);
 
   return (
-    <Box sx={{ bgcolor: "#f5f7f5", minHeight: "100vh", color: "#333" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background: "#ffffff",
+        color: "#1a3c34",
+        borderTop: "4px double #1a3c34",
+        borderBottom: "4px double #1a3c34",
+        position: "relative",
+      }}
+    >
       <TopNavBar />
-      <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 } }}>
-        <Typography
-          variant="h4"
-          fontWeight="700"
-          textAlign="center"
-          gutterBottom
-          sx={{ color: "#1a3c34" }}
-        >
-          Farmer Registration – FairTrace
-        </Typography>
 
+      <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>
+        {/* Header */}
+        <Box sx={{ textAlign: "center", mb: 6 }}>
+          <Typography
+            sx={{
+              fontFamily: '"Georgia", serif',
+              fontSize: { xs: "2.3rem", md: "3.2rem" },
+              fontWeight: 800,
+              letterSpacing: "-0.05em",
+              color: "#1a3c34",
+              mb: 1,
+            }}
+          >
+            FARMER REGISTRATION
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.95rem",
+              fontWeight: 600,
+              color: "#2f855a",
+              letterSpacing: "2.2px",
+              textTransform: "uppercase",
+            }}
+          >
+            FairTrace Authority •  2025
+          </Typography>
+        </Box>
+
+        {/* Registration Form — Certificate Style */}
         <Box
           sx={{
-            bgcolor: "#fff",
-            borderRadius: 3,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-            overflow: "hidden",
+            background: "#ffffff",
+            border: "4px double #1a3c34",
+            p: { xs: 4, md: 5 },
+            boxShadow: "0 16px 50px rgba(26, 60, 52, 0.16)",
+            position: "relative",
+            maxWidth: 680,
+            mx: "auto",
           }}
         >
-          <Stepper activeStep={activeStep} alternativeLabel sx={{ pt: 4, pb: 2 }}>
+          {/* Official Seal */}
+          <Box
+            sx={{
+              position: "absolute",
+              top: -18,
+              right: 18,
+              width: 72,
+              height: 72,
+              border: "5px double #1a3c34",
+              borderRadius: "50%",
+              bgcolor: "#ffffff",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "0.52rem",
+              fontWeight: 800,
+              color: "#1a3c34",
+              boxShadow: "0 8px 24px rgba(26, 60, 52, 0.22)",
+              zIndex: 10,
+            }}
+          >
+            <Stamp style={{ fontSize: 24 }} />
+            OFFICIAL<br />FORM
+          </Box>
+
+          <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
             {steps.map((label) => (
               <Step key={label}>
-                <StepLabel>{label}</StepLabel>
+                <StepLabel
+                  StepIconProps={{
+                    sx: {
+                      color: activeStep >= steps.indexOf(label) ? "#2f855a" : "#ccc",
+                      "&.Mui-active": { color: "#2f855a" },
+                      "&.Mui-completed": { color: "#2f855a" },
+                    },
+                  }}
+                  sx={{
+                    "& .MuiStepLabel-label": {
+                      color: "#1a3c34",
+                      fontWeight: 600,
+                      fontSize: "0.95rem",
+                    },
+                  }}
+                >
+                  {label}
+                </StepLabel>
               </Step>
             ))}
           </Stepper>
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ px: { xs: 3, md: 6 }, pb: 4 }}>
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             {/* Step 0: Personal Info */}
-            <TabPanel value={activeStep} index={0}>
-              <TextField label="Full Name" name="fullName" value={formData.fullName} onChange={handleChange} fullWidth required error={!!errors.fullName} helperText={errors.fullName} sx={{ mb: 3 }} />
-              <TextField label="National ID" name="nationalId" value={formData.nationalId} onChange={handleChange} fullWidth required error={!!errors.nationalId} helperText={errors.nationalId} sx={{ mb: 3 }} />
-              <TextField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} fullWidth required error={!!errors.phone} helperText={errors.phone} sx={{ mb: 3 }} />
-              <TextField label="Email" name="email" type="email" value={formData.email} onChange={handleChange} fullWidth required error={!!errors.email} helperText={errors.email} sx={{ mb: 3 }} />
-            </TabPanel>
+            {activeStep === 0 && (
+              <Box sx={{ display: "grid", gap: 3 }}>
+                <TextField
+                  label="Full Name"
+                  name="fullName"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.fullName}
+                  helperText={errors.fullName}
+                  fullWidth
+                  InputProps={{
+                    sx: { background: "#f8faf9" },
+                  }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+                <TextField
+                  label="National ID"
+                  name="nationalId"
+                  value={formData.nationalId}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.nationalId}
+                  helperText={errors.nationalId}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+                <TextField
+                  label="Phone Number"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.phone}
+                  helperText={errors.phone}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+                <TextField
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.email}
+                  helperText={errors.email}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+              </Box>
+            )}
 
             {/* Step 1: Farm Details */}
-            <TabPanel value={activeStep} index={1}>
-              <TextField label="Farm Address" name="farmAddress" value={formData.farmAddress} onChange={handleChange} fullWidth required error={!!errors.farmAddress} helperText={errors.farmAddress} sx={{ mb: 3 }} />
+            {activeStep === 1 && (
+              <Box sx={{ display: "grid", gap: 3 }}>
+                <TextField
+                  label="Farm Address"
+                  name="farmAddress"
+                  value={formData.farmAddress}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.farmAddress}
+                  helperText={errors.farmAddress}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
 
-              <Box sx={{ height: 320, borderRadius: 2, overflow: "hidden", mb: 3, border: "1px solid #e0e0e0" }}>
-                {mapLoading ? (
-                  <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-                    <CircularProgress />
-                  </Box>
-                ) : (
-                  <MapContainer center={position} zoom={14} style={{ height: "100%", width: "100%" }}>
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <LocationMarker setPosition={setPosition} />
-                    {formData.gpsLat && formData.gpsLong && (
-                      <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />
-                    )}
-                  </MapContainer>
+                {/* Map — Same Height as Form */}
+                <Box
+                  sx={{
+                    height: 340,
+                    border: "3px double #1a3c34",
+                    borderRadius: 0,
+                    overflow: "hidden",
+                    mb: 2,
+                    position: "relative",
+                    boxShadow: "0 8px 24px rgba(26,60,52,0.12)",
+                  }}
+                >
+                  {mapLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+                      <CircularProgress size={36} sx={{ color: "#2f855a" }} />
+                    </Box>
+                  ) : (
+                    <MapContainer center={position} zoom={14} style={{ height: "100%", width: "100%" }}>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <LocationMarker setPosition={setPosition} />
+                      {formData.gpsLat && formData.gpsLong && (
+                        <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />
+                      )}
+                    </MapContainer>
+                  )}
+                </Box>
+
+                {mapError && (
+                  <Alert severity="error" sx={{ mb: 1, fontSize: "0.9rem" }}>
+                    {mapError}
+                  </Alert>
                 )}
+
+                <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<MapPin size={18} />}
+                    onClick={handleGetLocation}
+                    sx={{
+                      flex: 1,
+                      border: "2px solid #2f855a",
+                      color: "#2f855a",
+                      fontWeight: 600,
+                      py: 1.5,
+                    }}
+                  >
+                    Use Current
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={handleGeocodeAddress}
+                    sx={{
+                      flex: 1,
+                      border: "2px solid #2f855a",
+                      color: "#2f855a",
+                      fontWeight: 600,
+                      py: 1.5,
+                    }}
+                  >
+                    Find Address
+                  </Button>
+                </Box>
+
+                <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <TextField
+                    label="GPS Latitude"
+                    name="gpsLat"
+                    value={formData.gpsLat}
+                    onChange={handleChange}
+                    sx={{ flex: 1 }}
+                    error={!!errors.gps}
+                    helperText={errors.gps || "Click map or use buttons"}
+                    InputProps={{ sx: { background: "#f8faf9" } }}
+                  />
+                  <TextField
+                    label="GPS Longitude"
+                    name="gpsLong"
+                    value={formData.gpsLong}
+                    onChange={handleChange}
+                    sx={{ flex: 1 }}
+                    error={!!errors.gps}
+                    InputProps={{ sx: { background: "#f8faf9" } }}
+                  />
+                </Box>
+
+                <TextField
+                  label="Farm Size (acres)"
+                  name="farmSize"
+                  type="number"
+                  value={formData.farmSize}
+                  onChange={handleChange}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+                <TextField
+                  label="Main Crops / Livestock"
+                  name="mainCrops"
+                  value={formData.mainCrops}
+                  onChange={handleChange}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
               </Box>
-
-              {mapError && <Alert severity="error" sx={{ mb: 2 }}>{mapError}</Alert>}
-
-              <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
-                <Button variant="outlined" color="success" onClick={handleGetLocation}>
-                  Use Current Location
-                </Button>
-                <Button variant="outlined" color="success" onClick={handleGeocodeAddress}>
-                  Find From Address
-                </Button>
-              </Box>
-
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <TextField label="GPS Latitude" name="gpsLat" value={formData.gpsLat} onChange={handleChange} sx={{ flex: 1 }} error={!!errors.gps} helperText={errors.gps || "Click map or use buttons"} />
-                <TextField label="GPS Longitude" name="gpsLong" value={formData.gpsLong} onChange={handleChange} sx={{ flex: 1 }} error={!!errors.gps} />
-              </Box>
-
-              <TextField label="Farm Size (acres)" name="farmSize" type="number" value={formData.farmSize} onChange={handleChange} fullWidth sx={{ mt: 3, mb: 3 }} />
-              <TextField label="Main Crops / Livestock" name="mainCrops" value={formData.mainCrops} onChange={handleChange} fullWidth sx={{ mb: 3 }} />
-            </TabPanel>
+            )}
 
             {/* Step 2: Account Setup */}
-            <TabPanel value={activeStep} index={2}>
-              <TextField
-                label="Password"
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={handleChange}
-                fullWidth
-                required
-                error={!!errors.password}
-                helperText={errors.password}
-                sx={{ mb: 3 }}
-              />
-              <TextField
-                label="Confirm Password"
-                name="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                fullWidth
-                required
-                error={!!errors.confirmPassword}
-                helperText={errors.confirmPassword}
-                sx={{ mb: 3 }}
-              />
-            </TabPanel>
+            {activeStep === 2 && (
+              <Box sx={{ display: "grid", gap: 3 }}>
+                <TextField
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.password}
+                  helperText={errors.password}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+                <TextField
+                  label="Confirm Password"
+                  name="confirmPassword"
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  error={!!errors.confirmPassword}
+                  helperText={errors.confirmPassword}
+                  fullWidth
+                  InputProps={{ sx: { background: "#f8faf9" } }}
+                  InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
+                />
+              </Box>
+            )}
 
-            {/* Navigation Buttons */}
-            <Box sx={{ display: "flex", justifyContent: "space-between", mt: 4 }}>
-              <Button disabled={activeStep === 0} variant="outlined" startIcon={<ArrowBackIcon />} onClick={handleBack}>
+            {/* Navigation */}
+            <Box sx={{ display: "flex", justifyContent: "space-between", mt: 4, gap: 1.5 }}>
+              <Button
+                disabled={activeStep === 0}
+                variant="outlined"
+                startIcon={<ArrowBack fontSize="small" />}
+                onClick={handleBack}
+                sx={{
+                  border: "2px solid #1a3c34",
+                  color: "#1a3c34",
+                  fontWeight: 700,
+                  py: 1.8,
+                  flex: 1,
+                }}
+              >
                 Back
               </Button>
 
@@ -351,17 +550,32 @@ export default function RegisterPage() {
                 <Button
                   type="submit"
                   variant="contained"
-                  size="large"
                   disabled={submitting}
                   sx={{
-                    bgcolor: "#1a3c34",
-                    "&:hover": { bgcolor: "#0f241d" },
+                    background: "linear-gradient(45deg, #1a3c34 0%, #2f855a 100%)",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontFamily: '"Georgia", serif',
+                    py: 1.8,
+                    flex: 2,
+                    boxShadow: "0 10px 30px rgba(26,60,52,0.28)",
                   }}
                 >
-                  {submitting ? <CircularProgress size={24} color="inherit" /> : "Complete Registration"}
+                  {submitting ? <CircularProgress size={26} color="inherit" /> : "Complete Registration"}
                 </Button>
               ) : (
-                <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleNext} sx={{ bgcolor: "#2f855a", "&:hover": { bgcolor: "#276749" } }}>
+                <Button
+                  variant="contained"
+                  endIcon={<ArrowForward fontSize="small" />}
+                  onClick={handleNext}
+                  sx={{
+                    background: "#2f855a",
+                    color: "#fff",
+                    fontWeight: 700,
+                    py: 1.8,
+                    flex: 1,
+                  }}
+                >
                   Next
                 </Button>
               )}
@@ -382,18 +596,25 @@ export default function RegisterPage() {
         <Alert
           severity="success"
           action={
-            <IconButton size="small" aria-label="close" color="inherit" onClick={handleCloseSnack}>
+            <IconButton size="small" color="inherit" onClick={handleCloseSnack}>
               <CloseIcon fontSize="small" />
             </IconButton>
           }
-          sx={{ width: "100%", fontSize: "1rem" }}
+          sx={{
+            background: "#1e6b4a",
+            color: "#fff",
+            fontWeight: 600,
+            "& .MuiAlert-icon": { color: "#a8e6cf" },
+            width: "100%",
+            fontSize: "0.95rem",
+          }}
         >
           <strong>Registration Successful!</strong>
           <br />
           Your data is now on the blockchain.
           <br />
           Transaction Hash:{" "}
-          <Box component="span" sx={{ fontFamily: "Monospace", wordBreak: "break-all", fontSize: "0.85rem" }}>
+          <Box component="span" sx={{ fontFamily: "monospace", wordBreak: "break-all", fontSize: "0.82rem" }}>
             {txHash || "N/A"}
           </Box>
         </Alert>

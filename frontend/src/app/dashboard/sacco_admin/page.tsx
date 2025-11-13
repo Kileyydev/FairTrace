@@ -1,7 +1,10 @@
+// app/dashboard/sacco_admin/page.tsx
 "use client";
+
 import React, { useEffect, useState } from "react";
 import {
   Box,
+  Container,
   Typography,
   Table,
   TableHead,
@@ -9,23 +12,23 @@ import {
   TableRow,
   TableCell,
   TableContainer,
-  Paper,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   TextField,
   CircularProgress,
-  Container,
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
   SelectChangeEvent,
+  Avatar,
 } from "@mui/material";
+import { Stamp, LogOut, CheckCircle, XCircle } from "lucide-react";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
-import { motion } from "framer-motion";
+import { jwtDecode } from "jwt-decode";
+import { useRouter } from "next/navigation";
 
 interface Farmer {
   full_name: string;
@@ -54,6 +57,11 @@ interface Product {
   stages?: ProductStage[];
 }
 
+interface AdminUser {
+  id: number;
+  name: string;
+}
+
 export default function SaccoAdmin() {
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,16 +69,37 @@ export default function SaccoAdmin() {
   const [review, setReview] = useState("");
   const [loadingStages, setLoadingStages] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
+  const router = useRouter();
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
   useEffect(() => {
-    fetchProducts();
+    const token = localStorage.getItem("access");
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    try {
+      const decoded: any = jwtDecode(token);
+      if (!decoded.is_sacco_admin) {
+        window.location.href = "/dashboard";
+        return;
+      }
+      setAdmin({ id: decoded.user_id, name: decoded.name || "Admin" });
+      fetchProducts(token);
+    } catch (err) {
+      localStorage.clear();
+      window.location.href = "/login";
+    }
   }, []);
 
   const getValidAccessToken = async (): Promise<string | null> => {
     let token = localStorage.getItem("access");
     const refresh = localStorage.getItem("refresh");
     if (!token && refresh) {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+      const res = await fetch(`${API_BASE}/token/refresh/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh }),
@@ -83,15 +112,10 @@ export default function SaccoAdmin() {
     return token;
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (token: string) => {
     setError(null);
-    const token = await getValidAccessToken();
-    if (!token) {
-      setError("Session expired. Please log in again.");
-      return;
-    }
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/`, {
+      const res = await fetch(`${API_BASE}/sacco_admin/products/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -122,7 +146,7 @@ export default function SaccoAdmin() {
     const token = await getValidAccessToken();
     if (!token) return;
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/`, {
+      const res = await fetch(`${API_BASE}/sacco_admin/products/${product.uid}/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
@@ -140,7 +164,7 @@ export default function SaccoAdmin() {
     if (!token) return;
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${product.uid}/decision/`,
+        `${API_BASE}/sacco_admin/products/${product.uid}/decision/`,
         {
           method: "POST",
           headers: {
@@ -166,7 +190,7 @@ export default function SaccoAdmin() {
     if (!token) return;
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/sacco_admin/products/${uid}/update_status/`,
+        `${API_BASE}/sacco_admin/products/${uid}/update_status/`,
         {
           method: "POST",
           headers: {
@@ -186,12 +210,15 @@ export default function SaccoAdmin() {
     }
   };
 
-  const fadeInUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
   };
 
-  // Define stages in order
+  const handleRowClick = (uid: string) => {
+    router.push(`/dashboard/sacco_admin/${uid}`);
+  };
+
   const stageOptions = [
     { value: "approved", label: "Approved" },
     { value: "harvested", label: "Harvested" },
@@ -202,62 +229,168 @@ export default function SaccoAdmin() {
   return (
     <Box
       sx={{
-        background: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)",
         minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
+        background: "#ffffff",
+        color: "#1a3c34",
+        borderTop: "4px double #1a3c34",
+        borderBottom: "4px double #1a3c34",
         position: "relative",
-        overflow: "hidden",
       }}
     >
       <TopNavBar />
+
+      {/* Profile Top Right */}
+      {admin && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 100,
+            right: { xs: 16, md: 32 },
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 1,
+            zIndex: 10,
+          }}
+        >
+          <Avatar
+            sx={{
+              width: 72,
+              height: 72,
+              bgcolor: "#1a3c34",
+              fontSize: "2rem",
+              fontWeight: 800,
+              border: "4px double #2f855a",
+              boxShadow: "0 6px 20px rgba(26,60,52,0.2)",
+            }}
+          >
+            {admin.name.charAt(0)}
+          </Avatar>
+          <Typography
+            sx={{
+              fontFamily: '"Georgia", serif',
+              fontSize: "1.1rem",
+              fontWeight: 800,
+              color: "#1a3c34",
+            }}
+          >
+            {admin.name}
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              color: "#2f855a",
+              textTransform: "uppercase",
+              letterSpacing: "1.2px",
+            }}
+          >
+            SACCO ADMIN
+          </Typography>
+        </Box>
+      )}
+
+      {/* Logout Bottom Right */}
       <Box
         sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.1,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232f855a' fill-opacity='0.3' fill-rule='evenodd'%3E%3Cpath d='M0 0h60v60H0z'/%3E%3Cpath d='M30 30l15 15-15 15-15-15z'/%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundRepeat: "repeat",
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          zIndex: 1000,
         }}
-      />
-      <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 }, flexGrow: 1 }}>
-        <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
+      >
+        <Button
+          variant="contained"
+          startIcon={<LogOut size={18} />}
+          onClick={handleLogout}
+          sx={{
+            background: "#c62828",
+            color: "#fff",
+            fontWeight: 700,
+            py: 1.5,
+            px: 3,
+            borderRadius: 0,
+            boxShadow: "0 8px 24px rgba(198,40,40,0.35)",
+            "&:hover": { background: "#b71c1c" },
+          }}
+        >
+          Logout
+        </Button>
+      </Box>
+
+      <Container maxWidth="xl" sx={{ py: { xs: 10, md: 12 }, pb: 16 }}>
+        {/* Header */}
+        <Box sx={{ textAlign: "center", mb: 6 }}>
           <Typography
-            variant="h4"
-            fontWeight="800"
             sx={{
-              color: "#1e3a2f",
-              mb: 2,
-              fontSize: { xs: "1.8rem", md: "2.2rem" },
-              background: "linear-gradient(90deg, #1e3a2f 0%, #2f855a 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+              fontFamily: '"Georgia", serif',
+              fontSize: { xs: "2.3rem", md: "3.2rem" },
+              fontWeight: 800,
+              letterSpacing: "-0.05em",
+              color: "#1a3c34",
+              mb: 1,
             }}
           >
-            Sacco Admin Dashboard
+            SACCO ADMIN PANEL
           </Typography>
-
-          {error && (
-            <Typography color="error" sx={{ mb: 1.5, fontSize: "0.85rem", fontWeight: 500 }}>
-              {error}
-            </Typography>
-          )}
-
-          <TableContainer
-            component={Paper}
+          <Typography
             sx={{
-              borderRadius: 3,
-              boxShadow: "0 6px 24px rgba(0,0,0,0.15)",
-              background: "rgba(255,255,255,0.9)",
-              backdropFilter: "blur(10px)",
+              fontSize: "0.95rem",
+              fontWeight: 600,
+              color: "#2f855a",
+              letterSpacing: "2.2px",
+              textTransform: "uppercase",
             }}
           >
-            <Table stickyHeader>
+            FairTrace Authority • Product Certification
+          </Typography>
+        </Box>
+
+        {/* Official Table */}
+        <Box
+          sx={{
+            background: "#ffffff",
+            border: "4px double #1a3c34",
+            boxShadow: "0 16px 50px rgba(26, 60, 52, 0.16)",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {/* Official Seal */}
+          <Box
+            sx={{
+              position: "absolute",
+              top: -18,
+              right: 18,
+              width: 72,
+              height: 72,
+              border: "5px double #1a3c34",
+              borderRadius: "50%",
+              bgcolor: "#ffffff",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "0.52rem",
+              fontWeight: 800,
+              color: "#1a3c34",
+              boxShadow: "0 8px 24px rgba(26, 60, 52, 0.22)",
+              zIndex: 10,
+            }}
+          >
+            <Stamp style={{ fontSize: 24 }} />
+            OFFICIAL<br />RECORDS
+          </Box>
+
+          <TableContainer sx={{ maxHeight: "70vh" }}>
+            <Table stickyHeader size="small">
               <TableHead>
-                <TableRow sx={{ background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)" }}>
+                <TableRow
+                  sx={{
+                    background: "#f8faf9",
+                    borderBottom: "3px double #1a3c34",
+                  }}
+                >
                   {[
                     "Title",
                     "Variety",
@@ -265,14 +398,21 @@ export default function SaccoAdmin() {
                     "Email",
                     "Phone",
                     "Location",
-                    "Quantity",
+                    "Qty",
                     "Acres",
                     "Status",
-                    "Stage",
+                    "Action",
                   ].map((h) => (
                     <TableCell
                       key={h}
-                      sx={{ fontWeight: 700, color: "#1e3a2f", fontSize: "0.85rem", py: 1.2 }}
+                      sx={{
+                        fontFamily: '"Courier New", monospace',
+                        fontWeight: 800,
+                        color: "#1a3c34",
+                        fontSize: "0.85rem",
+                        py: 1.5,
+                        letterSpacing: "1px",
+                      }}
                     >
                       {h}
                     </TableCell>
@@ -289,32 +429,69 @@ export default function SaccoAdmin() {
                   return (
                     <TableRow
                       key={product.uid}
-                      hover
+                      onClick={() => handleRowClick(product.uid)}
                       sx={{
                         cursor: "pointer",
-                        "&:hover": { background: "rgba(47, 133, 90, 0.05)" },
+                        "&:hover": { background: "#f0f7f3" },
+                        borderBottom: "1px solid #e0e0e0",
                       }}
-                      onClick={() => (window.location.href = `/dashboard/sacco_admin/${product.uid}`)}
                     >
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.title}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.variety}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.full_name}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.email}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.phone}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{farmer.farm_address}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.quantity}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.acres}</TableCell>
-                      <TableCell sx={{ color: "#1e3a2f", fontSize: "0.8rem" }}>{product.status}</TableCell>
-
-                      {/* STAGE UPDATE OR REVIEW - ALWAYS SHOW DROPDOWN IF APPROVED */}
+                      <TableCell sx={{ fontWeight: 600, color: "#1a3c34", fontSize: "0.88rem" }}>
+                        {product.title}
+                      </TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{product.variety}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.full_name}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.email}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.phone}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.farm_address}</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: "#1a3c34", fontSize: "0.88rem" }}>
+                        {product.quantity}
+                      </TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{product.acres}</TableCell>
                       <TableCell>
+                        <Box
+                          sx={{
+                            bgcolor:
+                              product.status === "pending"
+                                ? "#fff3e0"
+                                : product.status === "approved"
+                                ? "#e8f5e9"
+                                : product.status === "harvested"
+                                ? "#e3f2fd"
+                                : product.status === "in_transit"
+                                ? "#fff8e1"
+                                : "#ffebee",
+                            color:
+                              product.status === "pending"
+                                ? "#ef6c00"
+                                : product.status === "approved"
+                                ? "#2e7d32"
+                                : product.status === "harvested"
+                                ? "#1565c0"
+                                : product.status === "in_transit"
+                                ? "#ff8f00"
+                                : "#c62828",
+                            fontWeight: 700,
+                            fontSize: "0.78rem",
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 1,
+                            textAlign: "center",
+                          }}
+                        >
+                          {product.status.toUpperCase()}
+                        </Box>
+                      </TableCell>
+
+                      {/* Action Cell */}
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()} // Prevent row click
+                      >
                         {isApproved ? (
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <FormControl size="small" sx={{ minWidth: 130 }}>
-                              <InputLabel>Stage</InputLabel>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                            <FormControl size="small" sx={{ minWidth: 110 }}>
                               <Select
                                 value={product.status}
-                                label="Stage"
                                 onChange={(e: SelectChangeEvent) => {
                                   e.stopPropagation();
                                   const val = e.target.value;
@@ -322,21 +499,21 @@ export default function SaccoAdmin() {
                                     handleStatusChange(product.uid, val);
                                   }
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                                 disabled={updatingStatus === product.uid}
-                                MenuProps={{
-                                  PaperProps: { sx: { maxHeight: 200 } },
+                                sx={{
+                                  fontSize: "0.8rem",
+                                  "& .MuiSelect-select": { py: 0.8 },
                                 }}
                               >
-                                {stageOptions.map((option) => (
-                                  <MenuItem key={option.value} value={option.value}>
-                                    {option.label}
+                                {stageOptions.map((opt) => (
+                                  <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: "0.8rem" }}>
+                                    {opt.label}
                                   </MenuItem>
                                 ))}
                               </Select>
                             </FormControl>
                             {updatingStatus === product.uid && (
-                              <CircularProgress size={16} thickness={4} />
+                              <CircularProgress size={14} thickness={5} />
                             )}
                           </Box>
                         ) : product.status.toLowerCase() === "pending" ? (
@@ -348,19 +525,24 @@ export default function SaccoAdmin() {
                               fetchProductStages(product);
                             }}
                             sx={{
-                              textTransform: "none",
+                              fontFamily: '"Courier New", monospace',
+                              fontWeight: 700,
                               color: "#2f855a",
-                              borderColor: "#2f855a",
-                              fontWeight: 600,
-                              borderRadius: 2,
+                              border: "2px solid #2f855a",
+                              fontSize: "0.78rem",
+                              py: 0.8,
                               px: 2,
-                              "&:hover": { background: "#2f855a", color: "#fff" },
+                              borderRadius: 0,
+                              "&:hover": {
+                                background: "#2f855a",
+                                color: "#fff",
+                              },
                             }}
                           >
-                            Review
+                            REVIEW
                           </Button>
                         ) : (
-                          <Typography sx={{ fontSize: "0.8rem", color: "#666" }}>
+                          <Typography sx={{ fontSize: "0.78rem", color: "#666", fontStyle: "italic" }}>
                             {product.status}
                           </Typography>
                         )}
@@ -371,74 +553,118 @@ export default function SaccoAdmin() {
               </TableBody>
             </Table>
           </TableContainer>
-        </motion.div>
+        </Box>
 
-        {/* REVIEW DIALOG */}
-        <Dialog open={!!selectedProduct} onClose={() => setSelectedProduct(null)} fullWidth maxWidth="sm">
-          <DialogTitle sx={{ background: "linear-gradient(90deg, #e0f2e9 0%, #ffffff 100%)", color: "#1e3a2f" }}>
-            Review: {selectedProduct?.title}
-          </DialogTitle>
-          <DialogContent sx={{ p: 3 }}>
-            {loadingStages ? (
-              <CircularProgress sx={{ display: "block", mx: "auto", color: "#2f855a" }} />
-            ) : (
-              <>
-                {selectedProduct?.stages?.length ? (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Stage</TableCell>
-                        <TableCell>Qty</TableCell>
-                        <TableCell>Location</TableCell>
-                        <TableCell>QR</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {selectedProduct.stages.map((s: any) => (
-                        <TableRow key={s.id}>
-                          <TableCell>{s.stage_name}</TableCell>
-                          <TableCell>{s.quantity || "-"}</TableCell>
-                          <TableCell>{s.location || "-"}</TableCell>
-                          <TableCell>{s.scanned_qr ? "Yes" : "No"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Typography>No stages recorded.</Typography>
-                )}
-
-                <TextField
-                  label="Admin Review"
-                  multiline
-                  rows={3}
-                  value={review}
-                  onChange={(e) => setReview(e.target.value)}
-                  fullWidth
-                  sx={{ mt: 2 }}
-                />
-
-                <Box sx={{ mt: 2, display: "flex", gap: 1, justifyContent: "flex-end" }}>
-                  <Button
-                    variant="contained"
-                    color="success"
-                    onClick={() => handleAction(selectedProduct!, "approve")}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={() => handleAction(selectedProduct!, "reject")}
-                  >
-                    Reject
-                  </Button>
-                </Box>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* Empty State */}
+        {products.length === 0 && !error && (
+          <Box sx={{ textAlign: "center", py: 10 }}>
+            <Typography sx={{ fontSize: "1.3rem", fontWeight: 700, color: "#1a3c34", mt: 2 }}>
+              No Products Found
+            </Typography>
+            <Typography sx={{ color: "#666", mt: 1, fontSize: "0.95rem" }}>
+              New farmer registrations will appear here for review.
+            </Typography>
+          </Box>
+        )}
       </Container>
+
+      {/* REVIEW DIALOG */}
+      <Dialog open={!!selectedProduct} onClose={() => setSelectedProduct(null)} maxWidth="sm" fullWidth>
+        <DialogTitle
+          sx={{
+            background: "#f8faf9",
+            borderBottom: "3px double #1a3c34",
+            fontFamily: '"Georgia", serif',
+            fontWeight: 800,
+            color: "#1a3c34",
+            py: 2,
+          }}
+        >
+          REVIEW: {selectedProduct?.title}
+        </DialogTitle>
+        <DialogContent sx={{ p: 4 }}>
+          {loadingStages ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <CircularProgress size={36} sx={{ color: "#2f855a" }} />
+            </Box>
+          ) : (
+            <>
+              {selectedProduct?.stages?.length ? (
+                <Table size="small" sx={{ mb: 3 }}>
+                  <TableHead>
+                    <TableRow sx={{ background: "#f8faf9" }}>
+                      <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Stage</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Qty</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>Location</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: "#1a3c34" }}>QR</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedProduct.stages.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell sx={{ color: "#1a3c34" }}>{s.stage_name}</TableCell>
+                        <TableCell sx={{ color: "#1a3c34" }}>{s.quantity || "-"}</TableCell>
+                        <TableCell sx={{ color: "#1a3c34" }}>{s.location || "-"}</TableCell>
+                        <TableCell sx={{ color: s.scanned_qr ? "#2f855a" : "#c62828", fontWeight: 700 }}>
+                          {s.scanned_qr ? "YES" : "NO"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Typography sx={{ color: "#666", mb: 2 }}>No stages recorded.</Typography>
+              )}
+
+              <TextField
+                label="Admin Review"
+                multiline
+                rows={3}
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+                fullWidth
+                sx={{
+                  mb: 3,
+                  "& .MuiInputBase-root": { background: "#f8faf9" },
+                  "& .MuiInputLabel-root": { color: "#1a3c34", fontWeight: 600 },
+                }}
+              />
+
+              <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end" }}>
+                <Button
+                  variant="contained"
+                  startIcon={<CheckCircle size={18} />}
+                  onClick={() => handleAction(selectedProduct!, "approve")}
+                  sx={{
+                    background: "#2f855a",
+                    fontWeight: 700,
+                    py: 1.5,
+                    borderRadius: 0,
+                    boxShadow: "0 8px 24px rgba(47,133,90,0.35)",
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<XCircle size={18} />}
+                  onClick={() => handleAction(selectedProduct!, "reject")}
+                  sx={{
+                    background: "#c62828",
+                    fontWeight: 700,
+                    py: 1.5,
+                    borderRadius: 0,
+                    boxShadow: "0 8px 24px rgba(198,40,40,0.35)",
+                  }}
+                >
+                  Reject
+                </Button>
+              </Box>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </Box>
   );
