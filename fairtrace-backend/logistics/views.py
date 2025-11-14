@@ -130,3 +130,4 @@ class TransporterDeliveriesAPIView(APIView):
         logger.debug(f"[DEBUG] Returning deliveries data: {data}")
 
         return Response(data, status=status.HTTP_200_OK)
+

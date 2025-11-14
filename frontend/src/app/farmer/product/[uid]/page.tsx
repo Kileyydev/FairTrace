@@ -94,7 +94,7 @@ export default function FarmerView({ params }: { params: { uid: string } }) {
           overflow: "hidden",
         }}
       >
-        <TopNavBar sx={{ zIndex: 1300, position: "fixed", top: 0, width: "100%" }} />
+        <TopNavBar />
         <Box
           sx={{
             position: "absolute",
@@ -165,7 +165,7 @@ export default function FarmerView({ params }: { params: { uid: string } }) {
             </Card>
           </motion.div>
         </Container>
-        <Footer sx={{ position: "relative", zIndex: 1300, mt: "auto" }} />
+        <Footer />
       </Box>
     </ThemeProvider>
   );

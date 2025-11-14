@@ -152,11 +152,6 @@ export default function TracePage({ params }: { params: { uid: string } }) {
     }
   }, [uid]);
 
-  const handlePrint = useReactToPrint({
-    content: () => certificateRef.current,
-    documentTitle: `FairTrace_Certificate_${product?.pid}`,
-    pageStyle: `@page { size: A4; margin: 10mm; } @media print { .no-print { display: none !important; } }`,
-  });
 
   const handleDownloadPDF = async () => {
     if (!certificateRef.current) return;
@@ -358,9 +353,6 @@ export default function TracePage({ params }: { params: { uid: string } }) {
             <Box sx={{ mt: 2, textAlign: "center", className: "no-print" }}>
               <Button startIcon={<Download />} onClick={handleDownloadPDF} sx={{ mr: 1, color: "#1a3c34", border: "1px solid #1a3c34" }}>
                 Download PDF
-              </Button>
-              <Button startIcon={<Print />} onClick={handlePrint} sx={{ color: "#1a3c34", border: "1px solid #1a3c34" }}>
-                Print
               </Button>
             </Box>
 
