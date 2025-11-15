@@ -31,6 +31,10 @@ urlpatterns = [
     path("api/sacco_admin/", include("products.urls")),  # maps to products views
     #path('api/trace/', include('products.urls')),
     path('api/trace/', include('products.trace_urls')),
+    path("api/payments/", include("payments.urls")),
+    path("api/auth/", include("rest_framework.urls")),
+    path("api/", include("billing.urls")),# optional for browsable
+    # path("api/token-auth/", include("rest_framework.authtoken.urls")), 
 
 
      

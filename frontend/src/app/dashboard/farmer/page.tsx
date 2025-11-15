@@ -18,7 +18,6 @@ import {
   ThemeProvider,
   createTheme,
   CssBaseline,
-  Drawer,
   List,
   ListItem,
   ListItemButton,
@@ -33,7 +32,6 @@ import {
 import { Search as SearchIcon, Close as CloseIcon } from "@mui/icons-material";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import TopNavBar from "../../components/TopNavBar";
 import Footer from "../../components/FooterSection";
 import { jwtDecode } from "jwt-decode";
@@ -74,13 +72,19 @@ interface Feedback {
   product_name?: string;
 }
 
-interface Payment {
-  id: number;
-  product_id: number;
-  product_name: string;
+interface Tip {
+  id: string | number;
   amount: number;
-  status: string;
-  date: string;
+  product_id?: string;
+  product_name?: string;
+  status?: string;
+  message?: string;
+  created_at: string;
+}
+
+// Wallet interface
+interface Wallet {
+  balance: string; // backend returns Decimal as string
 }
 
 const theme = createTheme({
@@ -98,7 +102,8 @@ export default function Dashboard() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [tips, setTips] = useState<Tip[]>([]);
+  const [wallet, setWallet] = useState<Wallet | null>(null); // ← NEW
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>("dashboard");
@@ -120,6 +125,7 @@ export default function Dashboard() {
   const [termsScrolled, setTermsScrolled] = useState(false);
   const router = useRouter();
 
+  // =================== INITIAL LOAD ===================
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("access");
@@ -132,7 +138,8 @@ export default function Dashboard() {
         const decoded: JwtPayload = jwtDecode(token);
         setFarmerName(decoded.first_name || decoded.email || "Farmer");
         fetchProducts();
-        fetchPayments(token);
+        fetchWallet(token); // ← FETCH WALLET
+        fetchTips(token);
         fetchFeedbacks(token);
       } catch (err) {
         console.error("JWT decode error:", err);
@@ -141,6 +148,7 @@ export default function Dashboard() {
     }
   }, [router]);
 
+  // =================== SEARCH FILTER ===================
   useEffect(() => {
     if (searchQuery.trim() === "") {
       setFilteredProducts(products);
@@ -155,6 +163,63 @@ export default function Dashboard() {
     }
   }, [searchQuery, products]);
 
+  // =================== TOKEN HELPERS ===================
+  const getValidAccessToken = async (): Promise<string | null> => {
+    let token = localStorage.getItem("access");
+    const refresh = localStorage.getItem("refresh");
+    if (!token && refresh) {
+      try {
+        const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh }),
+        });
+        const refreshData = await refreshRes.json();
+        if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
+        token = refreshData.access;
+        localStorage.setItem("access", token ?? "");
+      } catch (err) {
+        console.error("Token refresh failed:", err);
+        return null;
+      }
+    }
+    return token;
+  };
+
+  const refreshAccessToken = async (): Promise<string | null> => {
+    const refresh = localStorage.getItem("refresh");
+    if (!refresh) return null;
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+      if (!res.ok) throw new Error("Failed to refresh token");
+      const data = await res.json();
+      localStorage.setItem("access", data.access);
+      return data.access;
+    } catch (err) {
+      console.error("Token refresh error:", err);
+      return null;
+    }
+  };
+
+  const getValidToken = async (): Promise<string | null> => {
+    const token = localStorage.getItem("access");
+    if (!token) return null;
+    try {
+      const decoded: any = jwtDecode(token);
+      if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+        return await refreshAccessToken();
+      }
+      return token;
+    } catch {
+      return await refreshAccessToken();
+    }
+  };
+
+  // =================== FETCHERS ===================
   const fetchProducts = async () => {
     setError(null);
     const token = await getValidAccessToken();
@@ -193,39 +258,37 @@ export default function Dashboard() {
     }
   };
 
-  const getValidAccessToken = async (): Promise<string | null> => {
-    let token = localStorage.getItem("access");
-    const refresh = localStorage.getItem("refresh");
-    if (!token && refresh) {
-      try {
-        const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh }),
-        });
-        const refreshData = await refreshRes.json();
-        if (!refreshRes.ok) throw new Error(refreshData.detail || "Failed to refresh token");
-        token = refreshData.access;
-        localStorage.setItem("access", token ?? "");
-      } catch (err) {
-        console.error("Token refresh failed:", err);
-        return null;
-      }
-    }
-    return token;
-  };
-
-  const fetchPayments = async (token: string) => {
+  // ← NEW: FETCH WALLET
+  const fetchWallet = async (token: string) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payments/`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/wallet/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch payments");
-      const data = await res.json();
-      setPayments(data || []);
+      if (!res.ok) throw new Error("Failed to fetch wallet");
+      const data: Wallet = await res.json();
+      setWallet(data);
     } catch (err) {
-      console.error("Error fetching payments:", err);
-      setError("Failed to load payments. Please try again.");
+      console.error("Wallet fetch error:", err);
+      // Don't block UI if wallet fails
+    }
+  };
+
+  const fetchTips = async (token: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tips/received/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        console.error("Tips fetch error:", err);
+        throw new Error("Failed to fetch tips");
+      }
+      const data = await res.json();
+      console.log("Fetched tips:", data);
+      setTips(data || []);
+    } catch (err) {
+      console.error("Error fetching tips:", err);
+      setError("Failed to load tips. Please try again.");
     }
   };
 
@@ -243,45 +306,13 @@ export default function Dashboard() {
     }
   };
 
-  const refreshAccessToken = async (): Promise<string | null> => {
-    const refresh = localStorage.getItem("refresh");
-    if (!refresh) return null;
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh }),
-      });
-      if (!res.ok) throw new Error("Failed to refresh token");
-      const data = await res.json();
-      localStorage.setItem("access", data.access);
-      return data.access;
-    } catch (err) {
-      console.error("Token refresh error:", err);
-      return null;
-    }
-  };
-
+  // =================== FORM HANDLERS ===================
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name as string]: typeof value === "string" ? value.trim() : value,
     }));
-  };
-
-  const getValidToken = async (): Promise<string | null> => {
-    const token = localStorage.getItem("access");
-    if (!token) return null;
-    try {
-      const decoded: any = jwtDecode(token);
-      if (decoded.exp && Date.now() / 1000 > decoded.exp) {
-        return await refreshAccessToken();
-      }
-      return token;
-    } catch {
-      return await refreshAccessToken();
-    }
   };
 
   const handleSubmitProduct = async (e: React.FormEvent) => {
@@ -403,6 +434,7 @@ export default function Dashboard() {
     setSelectedProduct(null);
   };
 
+  // =================== RENDER CONTENT ===================
   const renderContent = () => {
     switch (activeSection) {
       case "dashboard":
@@ -421,23 +453,21 @@ export default function Dashboard() {
                   <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>{products.length}</Typography>
                 </CardContent>
               </Card>
+
+              {/* ← WALLET CARD */}
               <Card sx={{ flex: "1 1 280px", minWidth: "280px", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
                 <CardContent>
-                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Pending Payments</Typography>
+                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Wallet Balance</Typography>
                   <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>
-                    {payments.filter((p) => p.status === "Pending").length}
+                    {wallet ? `KES ${Number(wallet.balance).toLocaleString()}` : "—"}
                   </Typography>
                 </CardContent>
               </Card>
-              <Card sx={{ flex: "1 1 280px", minWidth: "280px", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-                <CardContent>
-                  <Typography variant="h6" color="#1a3c34" fontWeight="500">Feedback Received</Typography>
-                  <Typography variant="h4" color="#2f855a" fontWeight="700" mt={1}>{feedbacks.length}</Typography>
-                </CardContent>
-              </Card>
+
             </Box>
           </Box>
         );
+
       case "add-product":
         return (
           <Box>
@@ -551,6 +581,7 @@ export default function Dashboard() {
             </Dialog>
           </Box>
         );
+
       case "products":
         return (
           <Box>
@@ -618,7 +649,7 @@ export default function Dashboard() {
                       </Typography>
                       <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid #e0e0e0" }}>
                         <Typography variant="caption" color="#2f855a" fontWeight="600">
-                          Click to view details →
+                          Click to view details
                         </Typography>
                       </Box>
                     </CardContent>
@@ -676,20 +707,20 @@ export default function Dashboard() {
                         </Box>
                       )}
 
-                      {payments.filter((payment) => payment.product_id === selectedProduct.id).length > 0 && (
+                      {tips.filter((tip) => tip.product_id === String(selectedProduct.id)).length > 0 && (
                         <Box>
                           <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
                             Payment History
                           </Typography>
-                          {payments
-                            .filter((payment) => payment.product_id === selectedProduct.id)
-                            .map((payment) => (
-                              <Box key={payment.id} sx={{ ml: 2, mb: 1, p: 2, bgcolor: "#f5f7f6", borderRadius: "8px" }}>
+                          {tips
+                            .filter((tip) => tip.product_id === String(selectedProduct.id))
+                            .map((tip) => (
+                              <Box key={tip.id} sx={{ ml: 2, mb: 1, p: 2, bgcolor: "#f5f7f6", borderRadius: "8px" }}>
                                 <Typography variant="body2" color="#1a3c34">
-                                  <strong>Amount:</strong> ${payment.amount} | <strong>Status:</strong> {payment.status}
+                                  <strong>Amount:</strong> KES {tip.amount} | <strong>Status:</strong> {tip.status}
                                 </Typography>
                                 <Typography variant="body2" color="#4a6b5e">
-                                  Date: {new Date(payment.date).toLocaleDateString()}
+                                  Date: {new Date(tip.created_at).toLocaleDateString()}
                                 </Typography>
                               </Box>
                             ))}
@@ -707,34 +738,54 @@ export default function Dashboard() {
             </Dialog>
           </Box>
         );
-      case "payments":
+
+      case "tips":
         return (
           <Box>
             <Typography variant="h4" fontWeight="600" gutterBottom sx={{ color: "#1a3c34", mb: 3 }}>
-              Payments
+              Tips & Payments
             </Typography>
+
+            {/* ← WALLET HEADER */}
+            {wallet && (
+              <Card sx={{ mb: 3, p: 2, bgcolor: "#e8f5e9", borderRadius: "12px" }}>
+                <Typography variant="h6" color="#1a3c34" fontWeight="600">
+                  Current Wallet Balance: <strong>KES {Number(wallet.balance).toLocaleString()}</strong>
+                </Typography>
+              </Card>
+            )}
+
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: "800px" }}>
-              {payments.map((payment) => (
-                <Card key={payment.id} sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-                  <CardContent>
-                    <Typography variant="h6" color="#1a3c34" fontWeight="600" gutterBottom>
-                      {payment.product_name}
-                    </Typography>
-                    <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
-                      Amount: <strong>${payment.amount}</strong>
-                    </Typography>
-                    <Typography variant="body2" color="#4a6b5e" sx={{ mb: 0.5 }}>
-                      Status: <strong>{payment.status}</strong>
-                    </Typography>
-                    <Typography variant="body2" color="#4a6b5e">
-                      Date: {new Date(payment.date).toLocaleDateString()}
-                    </Typography>
-                  </CardContent>
+              {tips.length === 0 ? (
+                <Card sx={{ p: 4, textAlign: "center", bgcolor: "#f9f9f9" }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No tips received yet.
+                  </Typography>
                 </Card>
-              ))}
+              ) : (
+                tips.map((tip: Tip) => (
+                  <Card key={tip.id} sx={{ borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.08)" }}>
+                    <CardContent>
+                      {tip.product_name && <Typography variant="h6" color="#1a3c34" fontWeight="600">{tip.product_name}</Typography>}
+                      <Typography variant="h5" color="#2f855a" fontWeight="700">
+                        KES {tip.amount.toLocaleString()}
+                      </Typography>
+                      {tip.message && <Typography variant="body2" color="#4a6b5e" sx={{ fontStyle: "italic" }}>“{tip.message}”</Typography>}
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                        {new Date(tip.created_at).toLocaleDateString("en-KE", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </Box>
           </Box>
         );
+
       case "feedback":
         return (
           <Box>
@@ -788,37 +839,33 @@ export default function Dashboard() {
             </Box>
           </Box>
         );
+
       default:
         return null;
     }
   };
 
+  // =================== UI RENDER ===================
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f5f7f6" }}>
         <TopNavBar />
         <Box sx={{ display: "flex", flex: 1, position: "relative" }}>
-          {/* Sidebar - Fixed height between TopNavBar and Footer */}
-          <Box
-            sx={{
-              width: DRAWER_WIDTH,
-              flexShrink: 0,
-              position: "relative",
-            }}
-          >
+          {/* Sidebar */}
+          <Box sx={{ width: DRAWER_WIDTH, flexShrink: 0, position: "relative" }}>
             <Box
-              sx={{
-                position: "fixed",
-                width: DRAWER_WIDTH,
-                top: "64px",
-                bottom: "130px",
-             
-                background: "#ffffff",
-                borderRight: "1px solid #e0e0e0",
-                zIndex: 10,
-              }}
-            >
+  sx={{
+    position: "fixed",
+    width: DRAWER_WIDTH,
+    top: "64px",
+    height: "calc(100vh - 64px - 130px)", // viewport - header - bottom gap
+    background: "#ffffff",
+    borderRight: "1px solid #e0e0e0",
+    zIndex: 10,
+    overflowY: "auto",
+  }}
+>
               <Box sx={{ p: 2 }}>
                 <Typography variant="h6" fontWeight="600" mb={2} color="#1a3c34">
                   Farmer Dashboard
@@ -830,11 +877,8 @@ export default function Dashboard() {
                       selected={activeSection === "dashboard"}
                       onClick={() => setActiveSection("dashboard")}
                       sx={{
-                        borderRadius: "8px",
-                        "&.Mui-selected": {
-                          bgcolor: "#e8f5e9",
-                          "&:hover": { bgcolor: "#e8f5e9" },
-                        },
+                    
+                        "&.Mui-selected": { bgcolor: "#e8f5e9", "&:hover": { bgcolor: "#e8f5e9" } },
                       }}
                     >
                       <ListItemText primary="Dashboard" />
@@ -846,10 +890,7 @@ export default function Dashboard() {
                       onClick={() => setActiveSection("add-product")}
                       sx={{
                         borderRadius: "8px",
-                        "&.Mui-selected": {
-                          bgcolor: "#e8f5e9",
-                          "&:hover": { bgcolor: "#e8f5e9" },
-                        },
+                        "&.Mui-selected": { bgcolor: "#e8f5e9", "&:hover": { bgcolor: "#e8f5e9" } },
                       }}
                     >
                       <ListItemText primary="Add Product" />
@@ -861,10 +902,7 @@ export default function Dashboard() {
                       onClick={() => setActiveSection("products")}
                       sx={{
                         borderRadius: "8px",
-                        "&.Mui-selected": {
-                          bgcolor: "#e8f5e9",
-                          "&:hover": { bgcolor: "#e8f5e9" },
-                        },
+                        "&.Mui-selected": { bgcolor: "#e8f5e9", "&:hover": { bgcolor: "#e8f5e9" } },
                       }}
                     >
                       <ListItemText primary="My Products" />
@@ -872,17 +910,14 @@ export default function Dashboard() {
                   </ListItem>
                   <ListItem disablePadding sx={{ mb: 0.5 }}>
                     <ListItemButton
-                      selected={activeSection === "payments"}
-                      onClick={() => setActiveSection("payments")}
+                      selected={activeSection === "tips"}
+                      onClick={() => setActiveSection("tips")}
                       sx={{
                         borderRadius: "8px",
-                        "&.Mui-selected": {
-                          bgcolor: "#e8f5e9",
-                          "&:hover": { bgcolor: "#e8f5e9" },
-                        },
+                        "&.Mui-selected": { bgcolor: "#e8f5e9", "&:hover": { bgcolor: "#e8f5e9" } },
                       }}
                     >
-                      <ListItemText primary="Payments" />
+                      <ListItemText primary="Tips & Payments" />
                     </ListItemButton>
                   </ListItem>
                   <ListItem disablePadding sx={{ mb: 0.5 }}>
@@ -891,10 +926,7 @@ export default function Dashboard() {
                       onClick={() => setActiveSection("feedback")}
                       sx={{
                         borderRadius: "8px",
-                        "&.Mui-selected": {
-                          bgcolor: "#e8f5e9",
-                          "&:hover": { bgcolor: "#e8f5e9" },
-                        },
+                        "&.Mui-selected": { bgcolor: "#e8f5e9", "&:hover": { bgcolor: "#e8f5e9" } },
                       }}
                     >
                       <ListItemText primary="Feedback" />

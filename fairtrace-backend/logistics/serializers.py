@@ -2,7 +2,7 @@
 import logging
 from rest_framework import serializers
 from users.models import User
-from .models import Transporter, Delivery
+from .models import Delivery
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # logistics/serializers.py
 import logging
 from rest_framework import serializers
-from .models import Transporter
+from logistics.models import Transporter
 
 # Create a logger for debugging
 logger = logging.getLogger(__name__)
@@ -64,3 +64,4 @@ class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = Delivery
         fields = ['id', 'pickup', 'dropoff', 'eta', 'weight', 'qr_code', 'status', 'transporter']
+

@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'feedbacks',
     'payments',
     'logistics',
+    'billing',
 ]
 
 # MIDDLEWARE
