@@ -679,49 +679,53 @@ export default function ProductDetails() {
               ) : null}
 
               {/* Transporter Info */}
-              {product.transporter && (
-                <Box
-                  sx={{
-                    border: "3px double #2f855a",
-                    background: "#f8faf9",
-                    p: 3,
-                    mb: 4,
-                  }}
-                >
-                  <Typography
-                    sx={{
-                      fontFamily: '"Courier New", monospace',
-                      fontWeight: 800,
-                      color: "#2f855a",
-                      fontSize: "1rem",
-                      mb: 2,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                    }}
-                  >
-                    <LocalShipping sx={{ fontSize: 20 }} /> TRANSPORTER ASSIGNED
-                  </Typography>
-                  <Box sx={{ pl: 2 }}>
-                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-                      Name: <strong>{product.transporter.name}</strong>
-                    </Typography>
-                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-                      Vehicle: {product.transporter.vehicle} ({product.transporter.license_plate})
-                    </Typography>
-                    <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-                      Phone: {product.transporter.phone}
-                    </Typography>
-                    {product.transporter_note && (
-                      <Box sx={{ mt: 2, p: 2, background: "#fff", borderLeft: "4px solid #2f855a" }}>
-                        <Typography sx={{ fontStyle: "italic", color: "#2e7d32", fontSize: "0.9rem" }}>
-                          "{product.transporter_note}"
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </Box>
-              )}
+{product.transporter && (
+  <Box
+    sx={{
+      border: "3px double #2f855a",
+      background: "#f8faf9",
+      p: 3,
+      mb: 4,
+    }}
+  >
+    <Typography
+      sx={{
+        fontFamily: '"Courier New", monospace',
+        fontWeight: 800,
+        color: "#2f855a",
+        fontSize: "1rem",
+        mb: 2,
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+      }}
+    >
+      <LocalShipping sx={{ fontSize: 20 }} /> TRANSPORTER ASSIGNED
+    </Typography>
+    <Box sx={{ pl: 2 }}>
+      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+        Name: <strong>{product.transporter.name}</strong>
+      </Typography>
+      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+        Vehicle: {product.transporter.vehicle} ({product.transporter.license_plate})
+      </Typography>
+      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+        Phone: {product.transporter.phone}
+      </Typography>
+      {/* ✅ Add email here */}
+      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
+        Email: {product.transporter.email}
+      </Typography>
+      {product.transporter_note && (
+        <Box sx={{ mt: 2, p: 2, background: "#fff", borderLeft: "4px solid #2f855a" }}>
+          <Typography sx={{ fontStyle: "italic", color: "#2e7d32", fontSize: "0.9rem" }}>
+            "{product.transporter_note}"
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  </Box>
+)}
 
               {/* Admin Review */}
               {product.status === "pending" && (

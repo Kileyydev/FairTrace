@@ -80,4 +80,5 @@ urlpatterns = [
     # Approve/reject product
     path('sacco_admin/products/<uuid:uid>/decision/', ProductDecisionAPIView.as_view(), name='product-decision'),
     path('products/<uuid:uid>/update_status/', views.update_status, name='update_status'),
+    path('products/<uuid:uid>/allocate/', ProductAllocateAPIView.as_view(), name='product-allocate'),
 ]

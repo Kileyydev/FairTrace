@@ -7,7 +7,8 @@ import secrets
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import User, OTPToken, ProductStage, Transporter
+from .models import User, OTPToken, ProductStage
+from users.models import Transporter
 from farmers.models import Farmer
 from farmers.utils import canonical_farmer_string, sha256_hex
 from products.models import Product
@@ -144,21 +145,17 @@ class VerifyOTPSerializer(serializers.Serializer):
 # ================================
 # 5. TRANSPORTER SERIALIZER
 # ================================
+from rest_framework import serializers
+from users.models import Transporter
+
 class TransporterSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='user.get_full_name', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
-    phone = serializers.CharField(read_only=True)
+    phone = serializers.CharField(source='user.phone', read_only=True)  # ensure phone comes from user
 
     class Meta:
         model = Transporter
-        fields = [
-            'id',
-            'name',
-            'email',
-            'phone',
-            'vehicle',
-            'license_plate',
-        ]
+        fields = ['id', 'name', 'email', 'phone', 'vehicle', 'license_plate']
         read_only_fields = ['id', 'name', 'email', 'phone']
 
 

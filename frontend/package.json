@@ -15,6 +15,7 @@
     "@mui/icons-material": "^7.3.2",
     "@mui/material": "^7.3.2",
     "@types/jwt-decode": "^3.1.0",
+    "axios": "^1.13.2",
     "crypto-js": "^4.2.0",
     "ethers": "^6.15.0",
     "firebase": "^11.9.1",
