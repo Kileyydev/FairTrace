@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
-import { Box, Typography, Button, Container } from "@mui/material";
+import { Box, Typography, Container } from "@mui/material";
 import Image from "next/image";
 
-const HERO_IMAGE = "/images/hero2.jpg"; // Update if you add more later
+const HERO_IMAGE = "/images/hero2.jpg";
 
 export default function HeroSection() {
+  const [imageError, setImageError] = React.useState(false);
+
   return (
     <Box
       sx={{
@@ -17,7 +19,7 @@ export default function HeroSection() {
         background: "#0f1e16",
       }}
     >
-      {/* Background Image */}
+      {/* Background Image Container */}
       <Box
         sx={{
           position: "absolute",
@@ -25,33 +27,44 @@ export default function HeroSection() {
           "& img": {
             objectFit: "cover",
             objectPosition: "center",
+            filter: "brightness(0.65)", // <-- Apply filter here
           },
         }}
       >
-        <Image
-          src={HERO_IMAGE}
-          alt="Supply Chain Traceability Platform"
-          fill
-          priority
-          quality={95}
-          style={{ filter: "brightness(0.65)" }}
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.style.display = "none";
-            const parent = target.parentElement;
-            if (parent) {
-              parent.style.background = "#0f1e16";
-              parent.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e0f2e9;font-weight:600;text-align:center;padding:2rem;">
-                  <div>
-                    <div style="font-size:1.5rem;margin-bottom:0.5rem;">Image Not Found</div>
-                    <div style="font-size:0.9rem;opacity:0.7;">${HERO_IMAGE}</div>
-                  </div>
-                </div>
-              `;
-            }
-          }}
-        />
+        {imageError ? (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              color: "#e0f2e9",
+              fontWeight: 600,
+              textAlign: "center",
+              p: 4,
+              background: "#0f1e16",
+            }}
+          >
+            <Box>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Image Not Found
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.7, fontFamily: "monospace" }}>
+                {HERO_IMAGE}
+              </Typography>
+            </Box>
+          </Box>
+        ) : (
+          <Image
+            src={HERO_IMAGE}
+            alt="Supply Chain Traceability Platform"
+            fill
+            priority
+            quality={95}
+            onError={() => setImageError(true)}
+            // No `sx`, no `style` → clean props
+          />
+        )}
       </Box>
 
       {/* Dark Overlay */}
@@ -64,7 +77,7 @@ export default function HeroSection() {
         }}
       />
 
-      {/* Content Container */}
+      {/* Content */}
       <Container
         maxWidth="lg"
         sx={{
@@ -85,7 +98,6 @@ export default function HeroSection() {
             py: { xs: 6, md: 8 },
           }}
         >
-          {/* Main Headline */}
           <Typography
             variant="h1"
             component="h1"
@@ -104,7 +116,6 @@ export default function HeroSection() {
             <span style={{ color: "#a8e6cf" }}>Trust Every Product.</span>
           </Typography>
 
-          {/* Subheadline */}
           <Typography
             variant="h5"
             sx={{
@@ -122,7 +133,7 @@ export default function HeroSection() {
             Immutable proof from source to shelf.
           </Typography>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons (empty for now) */}
           <Box
             sx={{
               display: "flex",
@@ -130,14 +141,12 @@ export default function HeroSection() {
               gap: 2.5,
               justifyContent: "center",
               alignItems: "center",
-              mb: 5,
             }}
-          >
-          </Box>
+          />
         </Box>
       </Container>
 
-      {/* Optional: Subtle bottom fade */}
+      {/* Bottom Fade */}
       <Box
         sx={{
           position: "absolute",
