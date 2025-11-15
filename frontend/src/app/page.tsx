@@ -1,5 +1,5 @@
 import TopNavigation from "./components/TopNavBar";
-import HeroSection from "./components/HeroSection";
+import HeroSection from "@/app/components/HeroSection";
 import AboutSection from "./components/AboutSection";
 import CTASection from "./components/CTASection";
 import Footer from "@/app/components/FooterSection";
