@@ -366,3 +366,29 @@ class MyProductsAPIView(APIView):
         logger.debug(f"[DEBUG] Serialized product data: {serializer.data}")
 
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+# logistics/views.py
+class RejectDeliveryRequestAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, product_uid):
+        user = request.user
+        if not getattr(user, "is_transporter", False):
+            return Response({"detail": "User is not a transporter."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            transporter = Transporter.objects.get(user=user)
+        except Transporter.DoesNotExist:
+            return Response({"detail": "Transporter profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            product = Product.objects.get(uid=product_uid, status="approved")
+        except Product.DoesNotExist:
+            return Response({"detail": "Product not found or already handled."}, status=status.HTTP_404_NOT_FOUND)
+
+        product.status = "rejected"
+        tx_hash = log_to_blockchain(product.uid, "rejected_delivery", transporter.id)
+        product.tx_hash = tx_hash
+        product.save()
+
+        return Response({"detail": "Delivery request rejected.", "tx_hash": tx_hash}, status=status.HTTP_200_OK)

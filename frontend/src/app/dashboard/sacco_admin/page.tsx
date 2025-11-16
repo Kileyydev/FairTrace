@@ -125,15 +125,19 @@ export default function SaccoAdmin() {
       }
       const data = await res.json();
 
-      const mappedProducts: Product[] = data.map((p: any) => ({
-        ...p,
-        farmer: {
-          full_name: `${p.farmer.first_name} ${p.farmer.last_name}`,
-          email: p.farmer.email,
-          phone: p.farmer.phone,
-          farm_address: p.farm_address || "-",
-        },
-      }));
+const mappedProducts: Product[] = data.map((p: any) => {
+  const f = p.farmer || {};
+
+  return {
+    ...p,
+    farmer: {
+      full_name: f.full_name || `${f.first_name || ''} ${f.last_name || ''}`.trim() || 'Unknown Farmer',
+      email: f.email || 'N/A',
+      phone: f.phone || f.phone_number || f.phoneNumber || 'N/A',
+      farm_address: f.farm_address || f.location || f.farmAddress || 'N/A',
+    },
+  };
+});
 
       setProducts(mappedProducts);
     } catch (err) {
