@@ -65,7 +65,7 @@ interface Product {
   variety: string;
   quantity: number;
   acres: number;
-  status: string;
+  status: string; // "pending" | "approved" | "in_transit" | "rejected"
   description: string;
   qr_code_data: string | null;
   images?: string[];
@@ -233,9 +233,11 @@ export default function ProductDetails() {
       }
 
       const data = await res.json();
+
+      // Update product with new status & transporter
       setProduct((prev) => ({ ...(prev as Product), ...data }));
       setShowAllocationDialog(false);
-      alert("Product allocated to transporter!");
+      alert(`Product allocated! Status: IN TRANSIT`);
     } catch (err) {
       setError("Network error");
     } finally {
@@ -273,6 +275,24 @@ export default function ProductDetails() {
       fetchTransporters();
     }
   }, [product?.status]);
+
+  // Status config
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case "pending":
+        return { label: "PENDING", color: "#ef6c00", bg: "#fff3e0" };
+      case "approved":
+        return { label: "APPROVED", color: "#2e7d32", bg: "#e8f5e9" };
+      case "in_transit":
+        return { label: "IN TRANSIT", color: "#1565c0", bg: "#e3f2fd" };
+      case "rejected":
+        return { label: "REJECTED", color: "#c62828", bg: "#ffebee" };
+      default:
+        return { label: status.toUpperCase(), color: "#666", bg: "#f5f5f5" };
+    }
+  };
+
+  const statusConfig = product ? getStatusConfig(product.status) : null;
 
   return (
     <Box
@@ -454,30 +474,24 @@ export default function ProductDetails() {
               </Typography>
 
               {/* Status & PID */}
-              <Box sx={{ display: "flex", justifyContent: "center", gap: 2, mb: 4 }}>
-                <Box
-                  sx={{
-                    bgcolor:
-                      product.status === "pending"
-                        ? "#fff3e0"
-                        : product.status === "approved"
-                        ? "#e8f5e9"
-                        : "#ffebee",
-                    color:
-                      product.status === "pending"
-                        ? "#ef6c00"
-                        : product.status === "approved"
-                        ? "#2e7d32"
-                        : "#c62828",
-                    fontWeight: 700,
-                    fontSize: "0.85rem",
-                    px: 2,
-                    py: 0.8,
-                    borderRadius: 1,
-                  }}
-                >
-                  STATUS: {product.status.toUpperCase()}
-                </Box>
+              <Box sx={{ display: "flex", justifyContent: "center", gap: 2, mb: 3, flexWrap: "wrap" }}>
+                {statusConfig && (
+                  <Box
+                    sx={{
+                      bgcolor: statusConfig.bg,
+                      color: statusConfig.color,
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                      px: 2,
+                      py: 0.8,
+                      borderRadius: 1,
+                      minWidth: 120,
+                      textAlign: "center",
+                    }}
+                  >
+                    STATUS: {statusConfig.label}
+                  </Box>
+                )}
                 {product.pid && (
                   <Box
                     sx={{
@@ -494,6 +508,53 @@ export default function ProductDetails() {
                   </Box>
                 )}
               </Box>
+
+              {/* TRANSPORTER CARD - SHOWS BELOW STATUS */}
+              {product.transporter && (
+                <Box
+                  sx={{
+                    border: "3px double #1565c0",
+                    background: "#e3f2fd",
+                    p: 3,
+                    mb: 4,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography
+                    sx={{
+                      fontFamily: '"Courier New", monospace',
+                      fontWeight: 800,
+                      color: "#0d47a1",
+                      fontSize: "1.1rem",
+                      mb: 2,
+                      textAlign: "center",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <LocalShipping sx={{ fontSize: 22 }} /> ASSIGNED TRANSPORTER
+                  </Typography>
+                  <Box sx={{ textAlign: "center", mb: 1 }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: "1.3rem", color: "#0d47a1" }}>
+                      {product.transporter.name}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+                    <Typography><strong>Vehicle:</strong> {product.transporter.vehicle} ({product.transporter.license_plate})</Typography>
+                    <Typography><strong>Phone:</strong> {product.transporter.phone}</Typography>
+                    <Typography><strong>Email:</strong> {product.transporter.email}</Typography>
+                  </Box>
+                  {product.transporter_note && (
+                    <Box sx={{ mt: 2, p: 2, background: "#fff", borderLeft: "4px solid #1565c0", fontSize: "0.9rem" }}>
+                      <Typography sx={{ fontStyle: "italic", color: "#0d47a1" }}>
+                        "{product.transporter_note}"
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
 
               {/* Description */}
               <Typography
@@ -516,7 +577,6 @@ export default function ProductDetails() {
                   background: "#f8faf9",
                   p: 3,
                   mb: 4,
-                  position: "relative",
                 }}
               >
                 <Typography
@@ -678,56 +738,7 @@ export default function ProductDetails() {
                 </Box>
               ) : null}
 
-              {/* Transporter Info */}
-{product.transporter && (
-  <Box
-    sx={{
-      border: "3px double #2f855a",
-      background: "#f8faf9",
-      p: 3,
-      mb: 4,
-    }}
-  >
-    <Typography
-      sx={{
-        fontFamily: '"Courier New", monospace',
-        fontWeight: 800,
-        color: "#2f855a",
-        fontSize: "1rem",
-        mb: 2,
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-      }}
-    >
-      <LocalShipping sx={{ fontSize: 20 }} /> TRANSPORTER ASSIGNED
-    </Typography>
-    <Box sx={{ pl: 2 }}>
-      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-        Name: <strong>{product.transporter.name}</strong>
-      </Typography>
-      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-        Vehicle: {product.transporter.vehicle} ({product.transporter.license_plate})
-      </Typography>
-      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-        Phone: {product.transporter.phone}
-      </Typography>
-      {/* ✅ Add email here */}
-      <Typography sx={{ fontWeight: 600, color: "#1a3c34" }}>
-        Email: {product.transporter.email}
-      </Typography>
-      {product.transporter_note && (
-        <Box sx={{ mt: 2, p: 2, background: "#fff", borderLeft: "4px solid #2f855a" }}>
-          <Typography sx={{ fontStyle: "italic", color: "#2e7d32", fontSize: "0.9rem" }}>
-            "{product.transporter_note}"
-          </Typography>
-        </Box>
-      )}
-    </Box>
-  </Box>
-)}
-
-              {/* Admin Review */}
+              {/* ADMIN REVIEW - Only for pending */}
               {product.status === "pending" && (
                 <Box sx={{ mb: 4 }}>
                   <Typography
@@ -789,9 +800,9 @@ export default function ProductDetails() {
                 </Box>
               )}
 
-              {/* Allocate Transporter */}
+              {/* ASSIGN BUTTON - ONLY if approved AND no transporter */}
               {product.status === "approved" && !product.transporter && (
-                <Box sx={{ textAlign: "center" }}>
+                <Box sx={{ textAlign: "center", mt: 3 }}>
                   <Button
                     variant="contained"
                     startIcon={<LocalShipping fontSize="small" />}
@@ -807,6 +818,15 @@ export default function ProductDetails() {
                   >
                     Assign Transporter
                   </Button>
+                </Box>
+              )}
+
+              {/* IN TRANSIT MESSAGE */}
+              {product.status === "in_transit" && (
+                <Box sx={{ textAlign: "center", mt: 3 }}>
+                  <Alert severity="info" sx={{ fontWeight: 600 }}>
+                    This product is <strong>IN TRANSIT</strong>. Only the assigned transporter can update it.
+                  </Alert>
                 </Box>
               )}
             </Box>
@@ -838,6 +858,9 @@ export default function ProductDetails() {
           </IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 4, background: "#f8faf9" }}>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            This will change status to <strong>IN TRANSIT</strong> and <strong>lock allocation</strong>.
+          </Alert>
           <FormControl fullWidth sx={{ mb: 3 }}>
             <InputLabel sx={{ color: "#1a3c34", fontWeight: 600 }}>Select Transporter</InputLabel>
             <Select
@@ -881,14 +904,14 @@ export default function ProductDetails() {
             onClick={handleAllocate}
             disabled={!selectedTransporter || allocating}
             sx={{
-              background: "#2f855a",
+              background: "#1565c0",
               color: "#fff",
               fontWeight: 700,
               px: 4,
               borderRadius: 0,
             }}
           >
-            {allocating ? <CircularProgress size={20} color="inherit" /> : "Assign"}
+            {allocating ? <CircularProgress size={20} color="inherit" /> : "Assign & Start Transit"}
           </Button>
         </DialogActions>
       </Dialog>

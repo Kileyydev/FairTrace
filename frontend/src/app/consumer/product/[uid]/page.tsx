@@ -1,12 +1,21 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { Typography, Box, CircularProgress, Paper, Container, ThemeProvider, createTheme, CssBaseline } from "@mui/material";
+import {
+  Typography,
+  Box,
+  CircularProgress,
+  Paper,
+  Container,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+} from "@mui/material";
 import { motion } from "framer-motion";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
 
+// Theme setup
 const theme = createTheme({
   palette: {
     primary: { main: "#2f855a", contrastText: "#ffffff" },
@@ -33,17 +42,33 @@ const theme = createTheme({
   },
 });
 
-export default function ConsumerView({ params }: { params: { uid: string } }) {
+// Define product type (adjust according to your API)
+interface Farmer {
+  name?: string;
+  location?: string;
+}
+
+interface Product {
+  title: string;
+  farmer?: Farmer;
+  tx_hash?: string;
+  status?: string;
+}
+
+// Props type for the page
+interface ConsumerViewProps {
+  params: { uid: string };
+}
+
+export default function ConsumerView({ params }: ConsumerViewProps) {
   const { uid } = params;
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProduct() {
       try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/trace/${uid}/`
-        );
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trace/${uid}/`);
         if (!res.ok) throw new Error("Failed to fetch product");
         const data = await res.json();
         setProduct(data);
@@ -53,12 +78,23 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
         setLoading(false);
       }
     }
+
     fetchProduct();
   }, [uid]);
 
-  if (loading) return <CircularProgress sx={{ color: "#2f855a", display: "block", margin: "auto", mt: 4 }} />;
+  if (loading)
+    return (
+      <CircularProgress
+        sx={{ color: "#2f855a", display: "block", margin: "auto", mt: 4 }}
+      />
+    );
 
-  if (!product) return <Typography color="error" sx={{ textAlign: "center", mt: 4 }}>Product not found</Typography>;
+  if (!product)
+    return (
+      <Typography color="error" sx={{ textAlign: "center", mt: 4 }}>
+        Product not found
+      </Typography>
+    );
 
   return (
     <ThemeProvider theme={theme}>
@@ -74,6 +110,7 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
         }}
       >
         <TopNavBar />
+        {/* Decorative background */}
         <Box
           sx={{
             position: "absolute",
@@ -81,7 +118,8 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
             left: 0,
             width: "100%",
             height: "200px",
-            background: "linear-gradient(180deg, rgba(30, 58, 47, 0.8) 0%, rgba(47, 133, 90, 0.6) 100%)",
+            background:
+              "linear-gradient(180deg, rgba(30, 58, 47, 0.8) 0%, rgba(47, 133, 90, 0.6) 100%)",
             opacity: 0.2,
             transform: "translateY(-15%)",
             transition: "transform 0.5s ease",
@@ -100,6 +138,7 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
             }}
           />
         </Box>
+
         <Container
           maxWidth="md"
           sx={{
@@ -131,14 +170,23 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
                 Consumer’s View
               </Typography>
               <Typography
-                sx={{ color: "#4a6b5e", fontSize: "0.9rem", mt: 1, maxWidth: "500px", mx: "auto" }}
+                sx={{
+                  color: "#4a6b5e",
+                  fontSize: "0.9rem",
+                  mt: 1,
+                  maxWidth: "500px",
+                  mx: "auto",
+                }}
               >
                 Trace the journey of your products with FairTrace.
               </Typography>
             </Box>
+
             <Box sx={{ mx: "auto", maxWidth: 400 }}>
               <Paper sx={{ p: 1.5, mb: 1 }}>
-                <Typography sx={{ mb: 0.5, fontWeight: 600, color: "#2f855a" }}>
+                <Typography
+                  sx={{ mb: 0.5, fontWeight: 600, color: "#2f855a" }}
+                >
                   <strong>Product:</strong> {product.title}
                 </Typography>
                 <Typography sx={{ mb: 0.5, color: "#4a6b5e" }}>
@@ -157,6 +205,7 @@ export default function ConsumerView({ params }: { params: { uid: string } }) {
             </Box>
           </motion.div>
         </Container>
+
         <Footer />
       </Box>
     </ThemeProvider>
