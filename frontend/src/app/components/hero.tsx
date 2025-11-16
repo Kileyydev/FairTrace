@@ -1,3 +1,4 @@
+// src/app/components/heroSection.tsx
 "use client";
 
 import React from "react";
@@ -19,7 +20,6 @@ export default function HeroSection() {
         background: "#0f1e16",
       }}
     >
-      {/* Background Image Container */}
       <Box
         sx={{
           position: "absolute",
@@ -27,7 +27,7 @@ export default function HeroSection() {
           "& img": {
             objectFit: "cover",
             objectPosition: "center",
-            filter: "brightness(0.65)", // <-- Apply filter here
+            filter: "brightness(0.65)",
           },
         }}
       >
@@ -62,12 +62,10 @@ export default function HeroSection() {
             priority
             quality={95}
             onError={() => setImageError(true)}
-            // No `sx`, no `style` → clean props
           />
         )}
       </Box>
 
-      {/* Dark Overlay */}
       <Box
         sx={{
           position: "absolute",
@@ -77,7 +75,6 @@ export default function HeroSection() {
         }}
       />
 
-      {/* Content */}
       <Container
         maxWidth="lg"
         sx={{
@@ -133,7 +130,6 @@ export default function HeroSection() {
             Immutable proof from source to shelf.
           </Typography>
 
-          {/* CTA Buttons (empty for now) */}
           <Box
             sx={{
               display: "flex",
@@ -146,7 +142,6 @@ export default function HeroSection() {
         </Box>
       </Container>
 
-      {/* Bottom Fade */}
       <Box
         sx={{
           position: "absolute",
