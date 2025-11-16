@@ -1,4 +1,3 @@
-// app/dashboard/sacco_admin/page.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -31,10 +30,10 @@ import { jwtDecode } from "jwt-decode";
 import { useRouter } from "next/navigation";
 
 interface Farmer {
-  full_name: string;
+  first_name: string;
   email: string;
-  phone: string;
-  farm_address: string;
+  phone_number: string;
+  location: string;
 }
 
 interface ProductStage {
@@ -74,6 +73,9 @@ export default function SaccoAdmin() {
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
+  /* --------------------------------------------------------------- */
+  /* 1. AUTH & INITIAL FETCH */
+  /* --------------------------------------------------------------- */
   useEffect(() => {
     const token = localStorage.getItem("access");
     if (!token) {
@@ -112,6 +114,9 @@ export default function SaccoAdmin() {
     return token;
   };
 
+  /* --------------------------------------------------------------- */
+  /* 2. FETCH PRODUCTS — NOW MATCHES DETAIL PAGE RESPONSE */
+  /* --------------------------------------------------------------- */
   const fetchProducts = async (token: string) => {
     setError(null);
     try {
@@ -125,19 +130,24 @@ export default function SaccoAdmin() {
       }
       const data = await res.json();
 
-const mappedProducts: Product[] = data.map((p: any) => {
-  const f = p.farmer || {};
-
-  return {
-    ...p,
-    farmer: {
-      full_name: f.full_name || `${f.first_name || ''} ${f.last_name || ''}`.trim() || 'Unknown Farmer',
-      email: f.email || 'N/A',
-      phone: f.phone || f.phone_number || f.phoneNumber || 'N/A',
-      farm_address: f.farm_address || f.location || f.farmAddress || 'N/A',
-    },
-  };
-});
+      const mappedProducts: Product[] = data.map((p: any) => {
+        const f = p.farmer || {};
+        return {
+          uid: p.uid,
+          title: p.title,
+          variety: p.variety,
+          quantity: p.quantity,
+          acres: p.acres,
+          status: p.status,
+          description: p.description,
+          farmer: {
+            first_name: f.first_name || "Unknown",
+            email: f.email || "N/A",
+            phone_number: f.phone_number || "N/A",
+            location: f.location || "N/A",
+          },
+        };
+      });
 
       setProducts(mappedProducts);
     } catch (err) {
@@ -145,6 +155,9 @@ const mappedProducts: Product[] = data.map((p: any) => {
     }
   };
 
+  /* --------------------------------------------------------------- */
+  /* 3. FETCH STAGES */
+  /* --------------------------------------------------------------- */
   const fetchProductStages = async (product: Product) => {
     setLoadingStages(true);
     const token = await getValidAccessToken();
@@ -163,6 +176,9 @@ const mappedProducts: Product[] = data.map((p: any) => {
     }
   };
 
+  /* --------------------------------------------------------------- */
+  /* 4. APPROVE / REJECT */
+  /* --------------------------------------------------------------- */
   const handleAction = async (product: Product, action: "approve" | "reject") => {
     const token = await getValidAccessToken();
     if (!token) return;
@@ -188,6 +204,9 @@ const mappedProducts: Product[] = data.map((p: any) => {
     }
   };
 
+  /* --------------------------------------------------------------- */
+  /* 5. UPDATE STATUS */
+  /* --------------------------------------------------------------- */
   const handleStatusChange = async (uid: string, newStatus: string) => {
     setUpdatingStatus(uid);
     const token = await getValidAccessToken();
@@ -214,6 +233,9 @@ const mappedProducts: Product[] = data.map((p: any) => {
     }
   };
 
+  /* --------------------------------------------------------------- */
+  /* 6. LOGOUT & NAV */
+  /* --------------------------------------------------------------- */
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/login";
@@ -230,6 +252,9 @@ const mappedProducts: Product[] = data.map((p: any) => {
     { value: "delivered", label: "Delivered" },
   ];
 
+  /* --------------------------------------------------------------- */
+  /* 7. RENDER */
+  /* --------------------------------------------------------------- */
   return (
     <Box
       sx={{
@@ -243,7 +268,7 @@ const mappedProducts: Product[] = data.map((p: any) => {
     >
       <TopNavBar />
 
-      {/* Profile Top Right */}
+      {/* Admin Profile */}
       {admin && (
         <Box
           sx={{
@@ -294,15 +319,8 @@ const mappedProducts: Product[] = data.map((p: any) => {
         </Box>
       )}
 
-      {/* Logout Bottom Right */}
-      <Box
-        sx={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          zIndex: 1000,
-        }}
-      >
+      {/* Logout Button */}
+      <Box sx={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000 }}>
         <Button
           variant="contained"
           startIcon={<LogOut size={18} />}
@@ -350,7 +368,7 @@ const mappedProducts: Product[] = data.map((p: any) => {
           </Typography>
         </Box>
 
-        {/* Official Table */}
+        {/* Table */}
         <Box
           sx={{
             background: "#ffffff",
@@ -360,7 +378,6 @@ const mappedProducts: Product[] = data.map((p: any) => {
             overflow: "hidden",
           }}
         >
-          {/* Official Seal */}
           <Box
             sx={{
               position: "absolute",
@@ -426,9 +443,12 @@ const mappedProducts: Product[] = data.map((p: any) => {
               <TableBody>
                 {products.map((product) => {
                   const { farmer } = product;
-                  const isApproved = ["approved", "harvested", "in_transit", "delivered"].includes(
-                    product.status.toLowerCase()
-                  );
+                  const isApproved = [
+                    "approved",
+                    "harvested",
+                    "in_transit",
+                    "delivered",
+                  ].includes(product.status.toLowerCase());
 
                   return (
                     <TableRow
@@ -444,14 +464,19 @@ const mappedProducts: Product[] = data.map((p: any) => {
                         {product.title}
                       </TableCell>
                       <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{product.variety}</TableCell>
-                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.full_name}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>
+                        {farmer.first_name}
+                      </TableCell>
                       <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.email}</TableCell>
-                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.phone}</TableCell>
-                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.farm_address}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>
+                        {farmer.phone_number}
+                      </TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.location}</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: "#1a3c34", fontSize: "0.88rem" }}>
                         {product.quantity}
                       </TableCell>
                       <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{product.acres}</TableCell>
+
                       <TableCell>
                         <Box
                           sx={{
@@ -487,10 +512,7 @@ const mappedProducts: Product[] = data.map((p: any) => {
                         </Box>
                       </TableCell>
 
-                      {/* Action Cell */}
-                      <TableCell
-                        onClick={(e) => e.stopPropagation()} // Prevent row click
-                      >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {isApproved ? (
                           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                             <FormControl size="small" sx={{ minWidth: 110 }}>

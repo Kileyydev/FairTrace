@@ -72,3 +72,43 @@ def list_farmers(request):
     farmers = Farmer.objects.all()
     serializer = FarmerSerializer(farmers, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+# sacco_admin/views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import permissions, status
+from products.models import Product
+from products.serializers import ProductSerializer
+from farmers.models import Farmer          # <-- import the Farmer model
+from farmers.serializers import FarmerSerializer   # <-- you will create this
+
+class SaccoAdminProductListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # only SACCO admins can see every product
+        if not request.user.is_sacco_admin:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        products = Product.objects.select_related('farmer__user').all()
+        data = []
+        for p in products:
+            # build the payload exactly the way the front-end expects
+            farmer = p.farmer
+            data.append({
+                "uid": str(p.uid),
+                "title": p.title,
+                "variety": p.variety,
+                "quantity": p.quantity,
+                "acres": p.acres,
+                "status": p.status,
+                "description": p.description,
+                "farmer": {
+                    "first_name": farmer.user.first_name,
+                    "last_name":  farmer.user.last_name,
+                    "email":      farmer.user.email,
+                    "phone":      farmer.phone,           # <-- from Farmer profile
+                    "farm_address": farmer.farm_address,  # <-- from Farmer profile
+                },
+            })
+        return Response(data)

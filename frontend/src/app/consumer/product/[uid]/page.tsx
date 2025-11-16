@@ -42,7 +42,7 @@ const theme = createTheme({
   },
 });
 
-// Define product type (adjust according to your API)
+// Define product type
 interface Farmer {
   name?: string;
   location?: string;
@@ -55,25 +55,43 @@ interface Product {
   status?: string;
 }
 
-// Props type for the page
-interface ConsumerViewProps {
-  params: { uid: string };
-}
+// Correct PageProps for Next.js 15+
+type PageProps = {
+  params: Promise<{ uid: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-export default function ConsumerView({ params }: ConsumerViewProps) {
-  const { uid } = params;
+export default function ConsumerView({ params }: PageProps) {
+  const [uid, setUid] = useState<string | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Extract uid from Promise
   useEffect(() => {
+    (async () => {
+      try {
+        const { uid } = await params;
+        setUid(uid);
+      } catch (err) {
+        console.error("Failed to resolve params:", err);
+      }
+    })();
+  }, [params]);
+
+  // Fetch product when uid is available
+  useEffect(() => {
+    if (!uid) return;
+
     async function fetchProduct() {
       try {
+        setLoading(true);
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trace/${uid}/`);
         if (!res.ok) throw new Error("Failed to fetch product");
         const data = await res.json();
         setProduct(data);
       } catch (error) {
         console.error(error);
+        setProduct(null);
       } finally {
         setLoading(false);
       }
@@ -84,9 +102,9 @@ export default function ConsumerView({ params }: ConsumerViewProps) {
 
   if (loading)
     return (
-      <CircularProgress
-        sx={{ color: "#2f855a", display: "block", margin: "auto", mt: 4 }}
-      />
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
+        <CircularProgress sx={{ color: "#2f855a" }} />
+      </Box>
     );
 
   if (!product)
@@ -104,12 +122,13 @@ export default function ConsumerView({ params }: ConsumerViewProps) {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          bgcolor: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)",
+          bgcolor: "background.default",
           position: "relative",
           overflow: "hidden",
         }}
       >
         <TopNavBar />
+
         {/* Decorative background */}
         <Box
           sx={{
@@ -123,6 +142,7 @@ export default function ConsumerView({ params }: ConsumerViewProps) {
             opacity: 0.2,
             transform: "translateY(-15%)",
             transition: "transform 0.5s ease",
+            zIndex: 0,
           }}
           component={motion.div}
           animate={{ y: 0 }}
@@ -148,7 +168,7 @@ export default function ConsumerView({ params }: ConsumerViewProps) {
             mt: { xs: "56px", md: "64px" },
             minHeight: "calc(100vh - 56px - 80px)",
             position: "relative",
-            zIndex: 1200,
+            zIndex: 1,
           }}
         >
           <motion.div
@@ -184,9 +204,7 @@ export default function ConsumerView({ params }: ConsumerViewProps) {
 
             <Box sx={{ mx: "auto", maxWidth: 400 }}>
               <Paper sx={{ p: 1.5, mb: 1 }}>
-                <Typography
-                  sx={{ mb: 0.5, fontWeight: 600, color: "#2f855a" }}
-                >
+                <Typography sx={{ mb: 0.5, fontWeight: 600, color: "#2f855a" }}>
                   <strong>Product:</strong> {product.title}
                 </Typography>
                 <Typography sx={{ mb: 0.5, color: "#4a6b5e" }}>

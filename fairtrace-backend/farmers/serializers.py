@@ -1,11 +1,14 @@
+
+
+# farmers/serializers.py
 from rest_framework import serializers
 from .models import Farmer
 
 class FarmerSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(source='full_name', read_only=True)
-    phone_number = serializers.CharField(source='phone', read_only=True)
-    location = serializers.CharField(source='farm_address', read_only=True)
+    first_name = serializers.CharField(source='user.first_name')
+    last_name  = serializers.CharField(source='user.last_name')
+    email      = serializers.EmailField(source='user.email')
 
     class Meta:
         model = Farmer
-        fields = ['first_name', 'email', 'phone_number', 'location']
+        fields = ['first_name', 'last_name', 'email', 'phone', 'farm_address']

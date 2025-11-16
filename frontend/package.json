@@ -47,8 +47,10 @@
     "@types/react-dom": "^19",
     "@types/react-slick": "^0.23.13",
     "@types/swiper": "^5.4.3",
+    "@types/webpack": "^5.28.5",
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webpack": "^5.102.1"
   }
 }

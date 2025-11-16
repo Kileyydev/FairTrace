@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Box, Typography, Button, CircularProgress, TextField, Container, ThemeProvider, createTheme, CssBaseline } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Button,
+  CircularProgress,
+  TextField,
+  Container,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+} from "@mui/material";
 import { motion } from "framer-motion";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
@@ -28,7 +38,7 @@ const theme = createTheme({
             "& fieldset": { borderColor: "#c4d8c9" },
             "&:hover fieldset": { borderColor: "#2f855a" },
             "&.Mui-focused fieldset": {
-              borderColor: "linear-gradient(45deg, #2f855a 0%, #4caf50 100%)",
+              borderColor: "#2f855a",
             },
           },
           "& .MuiInputLabel-root": { color: "#4a6b5e" },
@@ -53,14 +63,35 @@ const theme = createTheme({
   },
 });
 
-export default function TransporterView({ params }: { params: { uid: string } }) {
-  const { uid } = params;
+// Fixed: params is now a Promise
+type PageProps = {
+  params: Promise<{ uid: string }>;
+};
+
+export default function TransporterView({ params }: PageProps) {
+  const [uid, setUid] = useState<string | null>(null);
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState("");
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"; // Fallback URL
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
 
+  // Await params
   useEffect(() => {
+    (async () => {
+      try {
+        const resolved = await params;
+        setUid(resolved.uid);
+      } catch (err) {
+        console.error("Failed to resolve params:", err);
+        setLoading(false);
+      }
+    })();
+  }, [params]);
+
+  // Fetch product when uid is available
+  useEffect(() => {
+    if (!uid) return;
+
     async function fetchProduct() {
       try {
         const res = await fetch(`${apiUrl}/trace/${uid}/`);
@@ -69,11 +100,12 @@ export default function TransporterView({ params }: { params: { uid: string } })
         setProduct(data);
       } catch (err) {
         console.error("Error fetching product:", err);
-        setProduct({ title: "N/A" }); // Fallback data
+        setProduct({ title: "N/A" });
       } finally {
         setLoading(false);
       }
     }
+
     fetchProduct();
   }, [uid, apiUrl]);
 
@@ -83,6 +115,12 @@ export default function TransporterView({ params }: { params: { uid: string } })
       alert("Please log in as transporter");
       return;
     }
+
+    if (!location.trim()) {
+      alert("Please enter a location");
+      return;
+    }
+
     try {
       const res = await fetch(`${apiUrl}/products/${uid}/location/`, {
         method: "POST",
@@ -92,15 +130,27 @@ export default function TransporterView({ params }: { params: { uid: string } })
         },
         body: JSON.stringify({ lat: 0.0, lng: 0.0, location }),
       });
-      if (!res.ok) throw new Error("Failed to update location");
-      alert("Location updated");
-    } catch (err) {
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || "Failed to update location");
+      }
+
+      alert("Location updated successfully!");
+      setLocation("");
+    } catch (err: any) {
       console.error("Error updating location:", err);
-      alert("Failed to update location");
+      alert(err.message || "Failed to update location");
     }
   };
 
-  if (loading) return <CircularProgress sx={{ color: "#2f855a", display: "block", margin: "auto", mt: 4 }} />;
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
+        <CircularProgress sx={{ color: "#2f855a" }} />
+      </Box>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -110,7 +160,7 @@ export default function TransporterView({ params }: { params: { uid: string } })
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          bgcolor: "linear-gradient(145deg, #f1f7f3 0%, #c9e2d3 100%)",
+          bgcolor: "background.default",
           position: "relative",
           overflow: "hidden",
         }}
@@ -118,6 +168,8 @@ export default function TransporterView({ params }: { params: { uid: string } })
         <Box sx={{ zIndex: 1300, position: "fixed", top: 0, width: "100%" }}>
           <TopNavBar />
         </Box>
+
+        {/* Decorative wave background */}
         <Box
           sx={{
             position: "absolute",
@@ -144,6 +196,7 @@ export default function TransporterView({ params }: { params: { uid: string } })
             }}
           />
         </Box>
+
         <Container
           maxWidth="lg"
           sx={{
@@ -175,11 +228,18 @@ export default function TransporterView({ params }: { params: { uid: string } })
                 Transporter’s View
               </Typography>
               <Typography
-                sx={{ color: "#4a6b5e", fontSize: "1rem", mt: 1, maxWidth: "600px", mx: "auto" }}
+                sx={{
+                  color: "#4a6b5e",
+                  fontSize: "1rem",
+                  mt: 1,
+                  maxWidth: "600px",
+                  mx: "auto",
+                }}
               >
                 Track and update the location of your products.
               </Typography>
             </Box>
+
             <Box
               sx={{
                 maxWidth: 500,
@@ -193,24 +253,25 @@ export default function TransporterView({ params }: { params: { uid: string } })
               }}
             >
               <Typography variant="h5" sx={{ mb: 2, color: "#2f855a" }}>
-                Transporter’s View
-              </Typography>
-              <Typography sx={{ mb: 2, color: "#4a6b5e" }}>
                 Product: {product?.title || "N/A"}
               </Typography>
+
               <TextField
                 label="Update Location"
+                placeholder="e.g. Nairobi Warehouse"
                 fullWidth
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 sx={{ my: 2 }}
               />
+
               <Button variant="contained" onClick={updateLocation} sx={{ mt: 2, px: 4 }}>
-                Submit
+                Submit Location
               </Button>
             </Box>
           </motion.div>
         </Container>
+
         <Box sx={{ position: "relative", zIndex: 1300, mt: "auto" }}>
           <Footer />
         </Box>

@@ -17,34 +17,51 @@ import {
 } from "@mui/material";
 import { Close as CloseIcon, ArrowForward, ArrowBack } from "@mui/icons-material";
 import dynamic from "next/dynamic";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { useMapEvents } from "react-leaflet";
 import TopNavBar from "../components/TopNavBar";
 import Footer from "../components/FooterSection";
 import { Stamp, MapPin } from "lucide-react";
 
-// Leaflet icon fix
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+// Dynamic imports to prevent SSR issues
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+);
+import { useMapEvents } from "react-leaflet";
 
-const customIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+// Leaflet icon setup — only runs in browser
+let L: any = null;
+let customIcon: any = null;
 
-const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+if (typeof window !== "undefined") {
+  L = require("leaflet");
+  require("leaflet/dist/leaflet.css");
+
+  // Fix default icon
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  });
+
+  customIcon = new L.Icon({
+    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+    iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
+}
 
 interface FormData {
   fullName: string;
@@ -74,8 +91,8 @@ interface Errors {
 }
 
 function LocationMarker({ setPosition }: { setPosition: React.Dispatch<React.SetStateAction<[number, number]>> }) {
-  useMapEvents({
-    click(e: L.LeafletMouseEvent) {
+  const mapEvents = useMapEvents?.({
+    click(e: any) {
       setPosition([e.latlng.lat, e.latlng.lng]);
     },
   });
@@ -111,52 +128,77 @@ export default function RegisterPage() {
   const handleCloseSnack = () => setSnackOpen(false);
 
   const handleGetLocation = () => {
+    if (typeof navigator === "undefined") return;
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const { latitude, longitude } = pos.coords;
-          setFormData({ ...formData, gpsLat: latitude.toFixed(6), gpsLong: longitude.toFixed(6) });
+          setFormData((prev) => ({
+            ...prev,
+            gpsLat: latitude.toFixed(6),
+            gpsLong: longitude.toFixed(6),
+          }));
           setPosition([latitude, longitude]);
           setMapError(null);
         },
         () => setMapError("Unable to fetch location.")
       );
-    } else setMapError("Geolocation not supported.");
+    } else {
+      setMapError("Geolocation not supported.");
+    }
   };
 
   const handleGeocodeAddress = async () => {
+    if (!formData.farmAddress.trim()) {
+      setMapError("Enter a farm address first.");
+      return;
+    }
+
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.farmAddress)}`);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.farmAddress)}`
+      );
       const data = await res.json();
       if (data[0]) {
-        setFormData({ ...formData, gpsLat: data[0].lat, gpsLong: data[0].lon });
-        setPosition([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        setFormData((prev) => ({
+          ...prev,
+          gpsLat: lat.toFixed(6),
+          gpsLong: lon.toFixed(6),
+        }));
+        setPosition([lat, lon]);
         setMapError(null);
-      } else setMapError("Address not found.");
+      } else {
+        setMapError("Address not found.");
+      }
     } catch {
       setMapError("Error fetching address.");
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const validateStep = (step: number): boolean => {
     const newErrors: Errors = {};
     if (step === 0) {
-      if (!formData.fullName) newErrors.fullName = "Full Name required";
-      if (!formData.nationalId) newErrors.nationalId = "National ID required";
-      if (!formData.phone) newErrors.phone = "Phone required";
-      if (!formData.email) newErrors.email = "Email required";
+      if (!formData.fullName.trim()) newErrors.fullName = "Full Name required";
+      if (!formData.nationalId.trim()) newErrors.nationalId = "National ID required";
+      if (!formData.phone.trim()) newErrors.phone = "Phone required";
+      if (!formData.email.trim()) newErrors.email = "Email required";
     }
     if (step === 1) {
-      if (!formData.farmAddress) newErrors.farmAddress = "Farm Address required";
-      if (!formData.gpsLat || !formData.gpsLong) newErrors.gps = "Farm location required";
+      if (!formData.farmAddress.trim()) newErrors.farmAddress = "Farm Address required";
+      if (!formData.gpsLat || !formData.gpsLong) newErrors.gps = "GPS location required";
     }
     if (step === 2) {
       if (!formData.password) newErrors.password = "Password required";
-      if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+      if (formData.password !== formData.confirmPassword)
+        newErrors.confirmPassword = "Passwords do not match";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -178,20 +220,38 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/register/`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiUrl) throw new Error("API URL not configured");
+
+      const res = await fetch(`${apiUrl}/users/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          nationalId: formData.nationalId,
+          phone: formData.phone,
+          email: formData.email,
+          farmAddress: formData.farmAddress,
+          gpsLat: formData.gpsLat,
+          gpsLong: formData.gpsLong,
+          farmSize: formData.farmSize,
+          mainCrops: formData.mainCrops,
+          saccoMembership: formData.saccoMembership,
+          password: formData.password,
+        }),
       });
+
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || "Registration failed");
+        alert(data.error || data.detail || "Registration failed");
         return;
       }
 
       setTxHash(data.tx_hash || "N/A");
       setSnackOpen(true);
+
+      // Reset form
       setFormData({
         fullName: "", nationalId: "", phone: "", email: "", farmAddress: "",
         gpsLat: "", gpsLong: "", farmSize: "", mainCrops: "", saccoMembership: "",
@@ -200,15 +260,15 @@ export default function RegisterPage() {
       setActiveStep(0);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Unknown error");
+      alert(err.message || "Network error");
     } finally {
       setSubmitting(false);
     }
   };
 
   useEffect(() => {
-    const timeout = setTimeout(() => setMapLoading(false), 800);
-    return () => clearTimeout(timeout);
+    const timer = setTimeout(() => setMapLoading(false), 800);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -225,7 +285,6 @@ export default function RegisterPage() {
       <TopNavBar />
 
       <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>
-        {/* Header */}
         <Box sx={{ textAlign: "center", mb: 6 }}>
           <Typography
             sx={{
@@ -248,11 +307,10 @@ export default function RegisterPage() {
               textTransform: "uppercase",
             }}
           >
-            FairTrace Authority •  2025
+            FairTrace Authority • 2025
           </Typography>
         </Box>
 
-        {/* Registration Form — Certificate Style */}
         <Box
           sx={{
             background: "#ffffff",
@@ -264,7 +322,6 @@ export default function RegisterPage() {
             mx: "auto",
           }}
         >
-          {/* Official Seal */}
           <Box
             sx={{
               position: "absolute",
@@ -328,9 +385,7 @@ export default function RegisterPage() {
                   error={!!errors.fullName}
                   helperText={errors.fullName}
                   fullWidth
-                  InputProps={{
-                    sx: { background: "#f8faf9" },
-                  }}
+                  InputProps={{ sx: { background: "#f8faf9" } }}
                   InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
                 />
                 <TextField
@@ -389,7 +444,6 @@ export default function RegisterPage() {
                   InputLabelProps={{ style: { color: "#1a3c34", fontWeight: 600 } }}
                 />
 
-                {/* Map — Same Height as Form */}
                 <Box
                   sx={{
                     height: 340,
@@ -405,14 +459,21 @@ export default function RegisterPage() {
                     <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
                       <CircularProgress size={36} sx={{ color: "#2f855a" }} />
                     </Box>
-                  ) : (
+                  ) : typeof window !== "undefined" && L ? (
                     <MapContainer center={position} zoom={14} style={{ height: "100%", width: "100%" }}>
                       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                       <LocationMarker setPosition={setPosition} />
-                      {formData.gpsLat && formData.gpsLong && (
-                        <Marker position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]} icon={customIcon} />
+                      {formData.gpsLat && formData.gpsLong && customIcon && (
+                        <Marker
+                          position={[parseFloat(formData.gpsLat), parseFloat(formData.gpsLong)]}
+                          icon={customIcon}
+                        />
                       )}
                     </MapContainer>
+                  ) : (
+                    <Box sx={{ p: 3, textAlign: "center", color: "#c62828" }}>
+                      Map failed to load.
+                    </Box>
                   )}
                 </Box>
 
@@ -528,7 +589,6 @@ export default function RegisterPage() {
               </Box>
             )}
 
-            {/* Navigation */}
             <Box sx={{ display: "flex", justifyContent: "space-between", mt: 4, gap: 1.5 }}>
               <Button
                 disabled={activeStep === 0}
@@ -586,7 +646,6 @@ export default function RegisterPage() {
 
       <Footer />
 
-      {/* Success Snackbar */}
       <Snackbar
         open={snackOpen}
         autoHideDuration={12000}
@@ -615,7 +674,7 @@ export default function RegisterPage() {
           <br />
           Transaction Hash:{" "}
           <Box component="span" sx={{ fontFamily: "monospace", wordBreak: "break-all", fontSize: "0.82rem" }}>
-            {txHash || "N/A"}
+            {txHash}
           </Box>
         </Alert>
       </Snackbar>

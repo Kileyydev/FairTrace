@@ -36,9 +36,6 @@ interface Product {
   farmer?: { id: string; name: string; email: string };
 }
 
-// -------------------------------
-// BACKEND CONSUMER SESSION TYPE
-// -------------------------------
 interface Consumer {
   name: string;
   phone: string;
@@ -100,17 +97,18 @@ const theme = createTheme({
 const truncate = (str: string = "", start = 10, end = 6) =>
   str.length > start + end ? `${str.slice(0, start)}...${str.slice(-end)}` : str;
 
-export default function TracePage({ params }: { params: { uid: string } }) {
-  const { uid } = params;
+// Fixed: params is now a Promise
+type PageProps = {
+  params: Promise<{ uid: string }>;
+};
 
+export default function TracePage({ params }: PageProps) {
+  const [uid, setUid] = useState<string | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
 
-  // -------------------------------
-  // 🔥 CONSUMER STATES (BACKEND)
-  // -------------------------------
   const [consumer, setConsumer] = useState<Consumer | null>(null);
   const [selectedPhone, setSelectedPhone] = useState("");
   const [pin, setPin] = useState("");
@@ -128,10 +126,23 @@ export default function TracePage({ params }: { params: { uid: string } }) {
     return status && !invalid.includes(status.toLowerCase());
   };
 
-  // -------------------------------
-  // LOAD PRODUCT + CONSUMER SESSION
-  // -------------------------------
+  // Await params
   useEffect(() => {
+    (async () => {
+      try {
+        const resolved = await params;
+        setUid(resolved.uid);
+      } catch (err) {
+        setError("Invalid product link");
+        setLoading(false);
+      }
+    })();
+  }, [params]);
+
+  // Load product and consumer session
+  useEffect(() => {
+    if (!uid) return;
+
     async function fetchProduct() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -147,9 +158,9 @@ export default function TracePage({ params }: { params: { uid: string } }) {
         setLoading(false);
       }
     }
+
     fetchProduct();
 
-    // Load consumer session from storage
     const saved = localStorage.getItem(`consumer_session`);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -158,12 +169,8 @@ export default function TracePage({ params }: { params: { uid: string } }) {
     }
   }, [uid]);
 
-  // -------------------------------
-  // 🔥 BACKEND CONSUMER LOGIN
-  // -------------------------------
   const handleLogin = async () => {
     setTipError(null);
-
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (!apiUrl) throw new Error("API URL missing");
@@ -178,36 +185,30 @@ export default function TracePage({ params }: { params: { uid: string } }) {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        setTipError(data.detail || "Invalid phone number or PIN");
+        setTipError(data.detail || "Invalid phone or PIN");
         return;
       }
 
       setConsumer(data);
       setIsAuthenticated(true);
-
       localStorage.setItem(`consumer_session`, JSON.stringify(data));
     } catch {
       setTipError("Login failed. Check connection.");
     }
   };
 
-  // -------------------------------
-  // 🔥 BACKEND TIP FARMER
-  // -------------------------------
-const handleTip = async () => {
-  setTipError(null);
-  setTipSuccess(null);
-  setTipLoading(true);
+  const handleTip = async () => {
+    setTipError(null);
+    setTipSuccess(null);
+    setTipLoading(true);
 
-  if (!consumer) {
-    setTipError("Please login first");
-    setTipLoading(false);
-    return;
-  }
+    if (!consumer) {
+      setTipError("Please login first");
+      setTipLoading(false);
+      return;
+    }
 
-  try {
     const amount = parseFloat(tipAmount);
     if (isNaN(amount) || amount <= 0) {
       setTipError("Enter a valid amount");
@@ -221,49 +222,42 @@ const handleTip = async () => {
       return;
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!apiUrl) throw new Error("API URL missing");
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiUrl) throw new Error("API URL missing");
 
-    const res = await fetch(`${apiUrl}/consumer/tip/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone: consumer.phone,
-        amount: amount,
-        product_uid: uid,
-      }),
-    });
+      const res = await fetch(`${apiUrl}/consumer/tip/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: consumer.phone,
+          amount,
+          product_uid: uid,
+        }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        setTipError(data.detail || "Transaction failed");
+        setTipLoading(false);
+        return;
+      }
 
-    if (!res.ok) {
-      setTipError(data.detail || "Transaction failed");
+      const updatedConsumer = { ...consumer, balance: parseFloat(data.new_balance) };
+      setConsumer(updatedConsumer);
+      localStorage.setItem("consumer_session", JSON.stringify(updatedConsumer));
+
+      setTipSuccess(
+        `Tip sent! Tx: ${truncate(data.tx)} | New balance: ${data.new_balance} KSH`
+      );
+      setTipAmount("");
+    } catch (err) {
+      setTipError("Network error. Try again.");
+    } finally {
       setTipLoading(false);
-      return;
     }
+  };
 
-    // Update consumer balance correctly
-    const updatedConsumer = { ...consumer, balance: parseFloat(data.new_balance) };
-    setConsumer(updatedConsumer);
-    localStorage.setItem("consumer_session", JSON.stringify(updatedConsumer));
-
-    setTipSuccess(
-      `Tip sent! Tx: ${truncate(data.tx)} | New balance: ${data.new_balance} KSH`
-    );
-    setTipAmount("");
-  } catch (err) {
-    console.error(err);
-    setTipError("Network error. Try again.");
-  }
-
-  setTipLoading(false);
-};
-
-
-
-  // -------------------------------
-  // LOGOUT
-  // -------------------------------
   const handleLogout = () => {
     localStorage.removeItem("consumer_session");
     setConsumer(null);
@@ -274,14 +268,14 @@ const handleTip = async () => {
   };
 
   const handleDownloadPDF = async () => {
-    if (!certificateRef.current) return;
+    if (!certificateRef.current || !product) return;
     const canvas = await html2canvas(certificateRef.current, { scale: 2, backgroundColor: "#fff" });
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
     const imgWidth = 190;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
     pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
-    pdf.save(`FairTrace_Certificate_${product?.pid}.pdf`);
+    pdf.save(`FairTrace_Certificate_${product.pid}.pdf`);
   };
 
   if (loading) {
@@ -314,7 +308,6 @@ const handleTip = async () => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f8faf9" }}>
         <Box sx={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1300, bgcolor: "#fff", borderBottom: "1px solid #1a3c34" }}>
           <TopNavBar />
@@ -412,7 +405,6 @@ const handleTip = async () => {
                   Support {product.farmer.name}
                 </Typography>
 
-                {/* LOGIN */}
                 {!isAuthenticated ? (
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
                     <TextField
@@ -421,7 +413,6 @@ const handleTip = async () => {
                       onChange={(e) => setSelectedPhone(e.target.value)}
                       fullWidth
                     />
-
                     <TextField
                       label="PIN"
                       type="password"
@@ -429,22 +420,18 @@ const handleTip = async () => {
                       onChange={(e) => setPin(e.target.value)}
                       fullWidth
                     />
-
                     <Button onClick={handleLogin} sx={{ bgcolor: "#2f855a", color: "#fff" }}>
                       Login to Tip
                     </Button>
                   </Box>
                 ) : (
-                  /* AUTHENTICATED VIEW */
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
                     <Typography sx={{ textAlign: "center", fontWeight: 600 }}>
                       Logged in: {consumer?.name} ({consumer?.phone})
                     </Typography>
-
                     <Typography sx={{ textAlign: "center", fontWeight: 600 }}>
                       Balance: {consumer?.balance} KSH
                     </Typography>
-
                     <TextField
                       label="Tip Amount (KSH)"
                       value={tipAmount}
@@ -452,7 +439,6 @@ const handleTip = async () => {
                       type="number"
                       fullWidth
                     />
-
                     <Button
                       disabled={tipLoading}
                       onClick={handleTip}
@@ -460,11 +446,9 @@ const handleTip = async () => {
                     >
                       {tipLoading ? "Processing..." : "Send Tip"}
                     </Button>
-
                     <Button onClick={handleLogout} sx={{ color: "#c62828", border: "1px solid #c62828" }}>
                       Logout
                     </Button>
-
                     <Button
                       onClick={() => router.push(`/farmer/products/${product.farmer?.id}`)}
                       sx={{ color: "#1a3c34", border: "1px solid #1a3c34" }}
@@ -479,7 +463,6 @@ const handleTip = async () => {
               </Paper>
             )}
 
-            {/* DOWNLOAD PDF */}
             <Box sx={{ mt: 3, textAlign: "center" }}>
               <Button
                 startIcon={<Download />}

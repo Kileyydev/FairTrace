@@ -35,20 +35,42 @@ const theme = createTheme({
   typography: { fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif' },
 });
 
-export default function FarmerView({ params }: { params: { uid: string } }) {
-  const { uid } = params;
+// Fix: params is now a Promise
+type PageProps = {
+  params: Promise<{ uid: string }>;
+};
+
+export default function FarmerView({ params }: PageProps) {
+  const [uid, setUid] = useState<string | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Await params first
   useEffect(() => {
+    (async () => {
+      try {
+        const resolved = await params;
+        setUid(resolved.uid);
+      } catch (err) {
+        console.error("Failed to resolve params:", err);
+        setError("Invalid product ID");
+        setLoading(false);
+      }
+    })();
+  }, [params]);
+
+  // Fetch product when uid is ready
+  useEffect(() => {
+    if (!uid) return;
+
     async function fetchProduct() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL;
         if (!apiUrl) {
           throw new Error("Environment variable NEXT_PUBLIC_API_URL is not defined");
         }
-        const url = apiUrl + "/trace/" + uid + "/";
+        const url = `${apiUrl}/trace/${uid}/`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to load product");
         const data = await res.json();
@@ -60,6 +82,7 @@ export default function FarmerView({ params }: { params: { uid: string } }) {
         setLoading(false);
       }
     }
+
     fetchProduct();
   }, [uid]);
 
