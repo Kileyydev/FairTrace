@@ -4,13 +4,8 @@ import {
   Box,
   Container,
   Typography,
-  Card,
-  CardContent,
-  Avatar,
   Button,
   Stack,
-  IconButton,
-  Tooltip,
   Tabs,
   Tab,
   CircularProgress,
@@ -21,10 +16,10 @@ import {
   CssBaseline,
   Paper,
   Divider,
+  Avatar,
 } from "@mui/material";
 import {
   Truck,
-  MapPin,
   CheckCircle,
   XCircle,
   Package,
@@ -40,10 +35,8 @@ import Footer from "@/app/components/FooterSection";
 import { jwtDecode } from "jwt-decode";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { initContracts, getBlockchainUtils } from "@/utils/blockchain";
 
-// -------------------------------
-// THEME - MATCH CERTIFICATE PAGE
-// -------------------------------
 const theme = createTheme({
   palette: {
     primary: { main: "#1a3c34" },
@@ -58,16 +51,7 @@ const theme = createTheme({
     body1: { fontSize: "1rem", lineHeight: 1.6 },
   },
   components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: { border: "2px solid #1a3c34", background: "#fff", boxShadow: "none" },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: { border: "3px double #1a3c34", background: "#fff", boxShadow: "none" },
-      },
-    },
+    MuiPaper: { styleOverrides: { root: { border: "2px solid #1a3c34", background: "#fff", boxShadow: "none" } } },
     MuiButton: {
       styleOverrides: {
         root: {
@@ -80,31 +64,12 @@ const theme = createTheme({
         },
       },
     },
-    MuiTabs: {
-      styleOverrides: {
-        root: { borderBottom: "2px solid #1a3c34" },
-        indicator: { backgroundColor: "#1a3c34" },
-      },
-    },
-    MuiTab: {
-      styleOverrides: {
-        root: {
-          textTransform: "none",
-          fontWeight: 600,
-          fontSize: "0.95rem",
-          padding: "8px 16px",
-          minHeight: "40px",
-        },
-      },
-    },
+    MuiTabs: { styleOverrides: { root: { borderBottom: "2px solid #1a3c34" }, indicator: { backgroundColor: "#1a3c34" } } },
+    MuiTab: { styleOverrides: { root: { textTransform: "none", fontWeight: 600, fontSize: "0.95rem", padding: "8px 16px", minHeight: "40px" } } },
   },
 });
 
-interface Farmer {
-  first_name: string;
-  location: string;
-}
-
+interface Farmer { first_name: string; location: string; }
 interface DeliveryRequest {
   uid: string;
   pid?: string;
@@ -119,22 +84,14 @@ interface DeliveryRequest {
   transporter_note?: string;
   status: "approved" | "in_transit" | "delivered";
 }
-
-interface Transporter {
-  id: number;
-  name: string;
-}
-
-interface JwtPayload {
-  user_id: number;
-  is_transporter?: boolean;
-  exp: number;
-}
+interface Transporter { id: number; name: string; }
+interface JwtPayload { user_id: number; is_transporter?: boolean; exp: number; }
 
 export default function TransporterDashboard() {
   const [transporter, setTransporter] = useState<Transporter | null>(null);
   const [deliveries, setDeliveries] = useState<DeliveryRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [blockchainReady, setBlockchainReady] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,34 +104,46 @@ export default function TransporterDashboard() {
       window.location.href = "/login";
       return;
     }
-    try {
-      const decoded: JwtPayload = jwtDecode(token);
-      if (!decoded.is_transporter) {
-        window.location.href = "/dashboard";
-        return;
-      }
-      fetchTransporter(token);
-      fetchDeliveries(token);
 
-      const interval = setInterval(() => fetchDeliveries(token), 45000);
-      return () => clearInterval(interval);
-    } catch (err) {
-      localStorage.clear();
-      window.location.href = "/login";
-    }
+    let mounted = true;
+
+    const initialize = async () => {
+      try {
+        const decoded: JwtPayload = jwtDecode(token);
+        if (!decoded.is_transporter) {
+          window.location.href = "/dashboard";
+          return;
+        }
+
+        await Promise.all([
+          fetchTransporter(token),
+          fetchDeliveries(token),
+        ]);
+
+        await initContracts();
+        if (mounted) setBlockchainReady(true);
+
+        // Faster refresh so UI feels snappier
+        const interval = setInterval(() => fetchDeliveries(token), 15000);
+        return () => clearInterval(interval);
+      } catch (err) {
+        console.error(err);
+        localStorage.clear();
+        window.location.href = "/login";
+      }
+    };
+
+    initialize();
+    return () => { mounted = false; };
   }, []);
 
   const fetchTransporter = async (token: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/logistics/transporters/me/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTransporter({ id: data.id, name: data.name });
-      }
-    } catch (err) {
-      console.error(err);
+    const res = await fetch(`${API_BASE}/logistics/transporters/me/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setTransporter({ id: data.id, name: data.name });
     }
   };
 
@@ -192,10 +161,7 @@ export default function TransporterDashboard() {
           title: p.title,
           variety: p.variety,
           quantity: p.quantity,
-          farmer: {
-            first_name: p.farmer?.first_name || "Unknown",
-            location: p.farmer?.location || "Unknown",
-          },
+          farmer: { first_name: p.farmer?.first_name || "Unknown", location: p.farmer?.location || "Unknown" },
           origin_address: p.origin_address || "Not specified",
           dropoff: p.dropoff || "Not specified",
           eta: p.eta || "N/A",
@@ -208,51 +174,112 @@ export default function TransporterDashboard() {
         setError("Failed to load deliveries");
       }
     } catch (err) {
-      console.error(err);
       setError("Network error");
     } finally {
       setLoading(false);
     }
   };
 
+  // FIXED: Now syncs with backend so status NEVER reverts
   const handleAccept = async (uid: string) => {
+    if (!blockchainReady) return alert("Blockchain still loading...");
     const token = localStorage.getItem("access");
     if (!token) return;
-    setDeliveries(prev => prev.map(d => (d.uid === uid ? { ...d, status: "in_transit" } : d)));
+
+    const delivery = deliveries.find(d => d.uid === uid);
+    if (!delivery?.pid) return alert("No blockchain PID found");
+
+    const { fairTraceTransport } = getBlockchainUtils();
+    if (!fairTraceTransport) return alert("Blockchain contract not ready");
+
     try {
-      const res = await fetch(`${API_BASE}/logistics/delivery/${uid}/accept/`, {
+      const movement = await fairTraceTransport.getMovement(delivery.pid);
+
+      if (movement.transporter !== "0x0000000000000000000000000000000000000000" || movement.accepted) {
+        alert("Already accepted by someone else!");
+        await fetchDeliveries(token);
+        return;
+      }
+
+      const tx = await fairTraceTransport.acceptTransport(delivery.pid);
+      await tx.wait();
+
+      // THIS IS THE KEY: Tell backend we accepted
+      await fetch(`${API_BASE}/logistics/delivery/${uid}/accept/`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
-      if (!res.ok) { const err = await res.json(); alert(`Failed: ${err.detail}`); fetchDeliveries(token); }
-    } catch { alert("Network error"); fetchDeliveries(token); }
+
+      setDeliveries(prev => prev.map(d =>
+        d.uid === uid ? { ...d, status: "in_transit" } : d
+      ));
+
+      alert("Accepted & confirmed! You're now in transit.");
+    } catch (err: any) {
+      console.error("Accept failed:", err);
+      alert("Failed: " + (err.reason || err.message || "Try again"));
+      await fetchDeliveries(token);
+    }
+  };
+
+  const handleComplete = async (uid: string) => {
+    if (!blockchainReady) return alert("Blockchain still loading...");
+    const token = localStorage.getItem("access");
+    if (!token) return;
+
+    const delivery = deliveries.find(d => d.uid === uid);
+    if (!delivery?.pid) return alert("No blockchain PID found");
+
+    const { fairTraceTransport } = getBlockchainUtils();
+    if (!fairTraceTransport) return alert("Contract not ready");
+
+    try {
+      const tx = await fairTraceTransport.completeTransport(delivery.pid);
+      await tx.wait();
+
+      // THIS IS THE KEY: Tell backend we completed
+      await fetch(`${API_BASE}/logistics/delivery/${uid}/complete/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      setDeliveries(prev => prev.map(d =>
+        d.uid === uid ? { ...d, status: "delivered" } : d
+      ));
+
+      alert("Delivered & confirmed on blockchain + server!");
+    } catch (err: any) {
+      console.error("Complete failed:", err);
+      alert("Failed: " + (err.reason || err.message || "Check wallet"));
+      await fetchDeliveries(token);
+    }
   };
 
   const handleReject = async (uid: string) => {
     if (!confirm("Reject this delivery?")) return;
     const token = localStorage.getItem("access");
     if (!token) return;
+
     setDeliveries(prev => prev.filter(d => d.uid !== uid));
     try {
       const res = await fetch(`${API_BASE}/logistics/delivery/${uid}/reject/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
-      if (!res.ok) { const err = await res.json(); alert(`Reject failed: ${err.detail}`); fetchDeliveries(token); }
-    } catch { alert("Network error"); }
-  };
-
-  const handleComplete = async (uid: string) => {
-    const token = localStorage.getItem("access");
-    if (!token) return;
-    setDeliveries(prev => prev.map(d => (d.uid === uid ? { ...d, status: "delivered" } : d)));
-    try {
-      const res = await fetch(`${API_BASE}/logistics/delivery/${uid}/complete/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      });
-      if (!res.ok) { const err = await res.json(); alert(`Failed: ${err.detail}`); fetchDeliveries(token); }
-    } catch { alert("Network error"); fetchDeliveries(token); }
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Reject failed: ${err.detail}`);
+        fetchDeliveries(token);
+      }
+    } catch {
+      alert("Network error");
+    }
   };
 
   const handleLogout = () => {
@@ -275,7 +302,6 @@ export default function TransporterDashboard() {
   const inTransit = deliveries.filter(d => d.status === "in_transit");
   const delivered = deliveries.filter(d => d.status === "delivered");
   const currentList = activeTab === 0 ? pending : activeTab === 1 ? inTransit : delivered;
-
   const getRequestId = (req: DeliveryRequest) => req.pid || req.uid.slice(0, 8).toUpperCase();
 
   if (loading) {
@@ -293,14 +319,12 @@ export default function TransporterDashboard() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f8faf9" }}>
-        {/* Fixed Top Nav */}
         <Box sx={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1300, bgcolor: "#fff", borderBottom: "1px solid #1a3c34" }}>
           <TopNavBar />
         </Box>
 
         <Box sx={{ flex: 1, pt: "70px", pb: 4 }}>
           <Container maxWidth="md" sx={{ py: 2 }}>
-            {/* Title */}
             <Typography variant="h3" sx={{ fontSize: "2.2rem", fontWeight: 700, color: "#1a3c34", textAlign: "center", mb: 1, fontFamily: '"Georgia", serif' }}>
               DISPATCH TERMINAL
             </Typography>
@@ -308,42 +332,25 @@ export default function TransporterDashboard() {
               FairTrace Logistics • Official Assignments
             </Typography>
 
-            {/* Tabs */}
+            {!blockchainReady && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Connecting to blockchain (Hardhat/Ganache)...
+              </Alert>
+            )}
+
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} centered sx={{ mb: 2 }}>
               <Tab label={`Pending (${pending.length})`} />
               <Tab label={`In Transit (${inTransit.length})`} />
               <Tab label={`Delivered (${delivered.length})`} />
             </Tabs>
 
-            {error && <Alert severity="error" sx={{ mb: 2, fontWeight: 600 }}>{error}</Alert>}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-            {/* Cards Container */}
             <Box ref={certificateRef}>
               <Stack spacing={3}>
                 {currentList.map((req) => (
                   <Paper key={req.uid} elevation={0} sx={{ p: 3, position: "relative" }}>
-                    {/* Official Seal */}
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        top: -12,
-                        right: 12,
-                        width: 68,
-                        height: 68,
-                        border: "5px double #1a3c34",
-                        borderRadius: "50%",
-                        bgcolor: "#fff",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "0.48rem",
-                        fontWeight: 800,
-                        color: "#1a3c34",
-                        boxShadow: "0 6px 18px rgba(26,60,52,0.18)",
-                        zIndex: 10,
-                      }}
-                    >
+                    <Box sx={{ position: "absolute", top: -12, right: 12, width: 68, height: 68, border: "5px double #1a3c34", borderRadius: "50%", bgcolor: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: "0.48rem", fontWeight: 800, color: "#1a3c34", boxShadow: "0 6px 18px rgba(26,60,52,0.18)", zIndex: 10 }}>
                       <Stamp style={{ fontSize: 20 }} />
                       ASSIGNED
                     </Box>
@@ -361,7 +368,6 @@ export default function TransporterDashboard() {
 
                     <Divider sx={{ my: 1.5, borderColor: "#1a3c34" }} />
 
-                    {/* Farmer */}
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5, color: "#1a3c34" }}>
                       <User size={16} />
                       <Typography sx={{ fontWeight: 600, fontSize: "0.95rem" }}>
@@ -370,7 +376,6 @@ export default function TransporterDashboard() {
                       <Chip label={req.farmer.location} size="small" sx={{ bgcolor: "#e8f5e9", color: "#2f855a", fontWeight: 600 }} />
                     </Box>
 
-                    {/* Locations */}
                     <Stack spacing={1}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                         <Navigation size={17} color="#2f855a" />
@@ -385,7 +390,6 @@ export default function TransporterDashboard() {
                       </Box>
                     </Stack>
 
-                    {/* Details */}
                     <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1} sx={{ mt: 1.5 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Clock size={15} color="#666" />
@@ -399,7 +403,6 @@ export default function TransporterDashboard() {
                       </Box>
                     </Stack>
 
-                    {/* Note */}
                     {req.transporter_note && (
                       <Box sx={{ mt: 1.5, p: 1.5, background: "#f8faf9", borderLeft: "4px solid #2f855a", borderRadius: 1 }}>
                         <Typography sx={{ fontStyle: "italic", color: "#1a3c34", fontSize: "0.88rem" }}>
@@ -408,15 +411,25 @@ export default function TransporterDashboard() {
                       </Box>
                     )}
 
-                    {/* Actions */}
                     {activeTab === 0 && (
                       <Stack direction="row" spacing={1.5} sx={{ mt: 2 }}>
-                        <Button fullWidth variant="contained" startIcon={<CheckCircle size={18} />} onClick={() => handleAccept(req.uid)}
-                          sx={{ bgcolor: "#2f855a", color: "#fff", fontWeight: 700 }}>
+                        <Button
+                          fullWidth
+                          variant="contained"
+                          startIcon={<CheckCircle size={18} />}
+                          onClick={() => handleAccept(req.uid)}
+                          disabled={!blockchainReady}
+                          sx={{ bgcolor: "#2f855a", color: "#fff", fontWeight: 700 }}
+                        >
                           Accept
                         </Button>
-                        <Button fullWidth variant="outlined" startIcon={<XCircle size={18} />} onClick={() => handleReject(req.uid)}
-                          sx={{ border: "2px solid #c62828", color: "#c62828", fontWeight: 700 }}>
+                        <Button
+                          fullWidth
+                          variant="outlined"
+                          startIcon={<XCircle size={18} />}
+                          onClick={() => handleReject(req.uid)}
+                          sx={{ border: "2px solid #c62828", color: "#c62828", fontWeight: 700 }}
+                        >
                           Reject
                         </Button>
                       </Stack>
@@ -424,8 +437,14 @@ export default function TransporterDashboard() {
 
                     {activeTab === 1 && (
                       <Box sx={{ mt: 2 }}>
-                        <Button fullWidth variant="contained" startIcon={<Package size={20} />} onClick={() => handleComplete(req.uid)}
-                          sx={{ bgcolor: "#2f855a", color: "#fff", fontWeight: 700, py: 1.8, fontSize: "1rem" }}>
+                        <Button
+                          fullWidth
+                          variant="contained"
+                          startIcon={<Package size={20} />}
+                          onClick={() => handleComplete(req.uid)}
+                          disabled={!blockchainReady}
+                          sx={{ bgcolor: "#2f855a", color: "#fff", fontWeight: 700, py: 1.8, fontSize: "1rem" }}
+                        >
                           Mark as Delivered
                         </Button>
                       </Box>
@@ -443,7 +462,6 @@ export default function TransporterDashboard() {
                 ))}
               </Stack>
 
-              {/* Empty State */}
               {currentList.length === 0 && (
                 <Paper elevation={0} sx={{ p: 5, textAlign: "center" }}>
                   <Truck size={72} color="#ccc" />
@@ -452,34 +470,22 @@ export default function TransporterDashboard() {
                     {activeTab === 1 && "No Active Deliveries"}
                     {activeTab === 2 && "No Completed Deliveries Yet"}
                   </Typography>
-                  <Typography sx={{ color: "#666", mt: 1, fontSize: "0.95rem" }}>
-                    {activeTab === 0 && "New assignments will appear here when available."}
-                    {activeTab === 1 && "Accepted jobs will show here."}
-                    {activeTab === 2 && "Keep up the great work!"}
-                  </Typography>
                 </Paper>
               )}
             </Box>
 
-            {/* Download PDF */}
             <Box sx={{ mt: 3, textAlign: "center" }}>
-              <Button
-                startIcon={<Stamp size={18} />}
-                onClick={handleDownloadPDF}
-                sx={{ color: "#1a3c34", border: "1px solid #1a3c34", fontWeight: 600 }}
-              >
+              <Button startIcon={<Stamp size={18} />} onClick={handleDownloadPDF} sx={{ color: "#1a3c34", border: "1px solid #1a3c34", fontWeight: 600 }}>
                 Download Dispatch Report (PDF)
               </Button>
             </Box>
           </Container>
         </Box>
 
-        {/* Footer */}
         <Box sx={{ borderTop: "1px solid #1a3c34", bgcolor: "#fff" }}>
           <Footer />
         </Box>
 
-        {/* Logout Button */}
         <Box sx={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000 }}>
           <Button variant="contained" startIcon={<LogOut size={18} />} onClick={handleLogout}
             sx={{ bgcolor: "#c62828", color: "#fff", fontWeight: 700, py: 1.5, px: 3, borderRadius: 0 }}>
@@ -487,7 +493,6 @@ export default function TransporterDashboard() {
           </Button>
         </Box>
 
-        {/* Profile Top Right */}
         <Box sx={{ position: "fixed", top: 100, right: { xs: 16, md: 32 }, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, zIndex: 10 }}>
           <Avatar sx={{ width: 68, height: 68, bgcolor: "#1a3c34", fontSize: "1.9rem", fontWeight: 800, border: "4px double #2f855a" }}>
             {transporter?.name.charAt(0)}

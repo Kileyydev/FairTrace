@@ -46,6 +46,12 @@ export default function TopNavBar() {
     handleMenuClose();
   };
 
+  const handleBlocksClick  = () => {
+    router.push("/blocks");
+    handleMenuClose();
+  };
+
+
   const handleLogoutClick = () => {
     setIsAuthenticated(false);
     handleMenuClose();
@@ -144,7 +150,7 @@ export default function TopNavBar() {
 
           {/* Desktop Navigation */}
           <Box sx={{ display: { xs: "none", md: "flex" }, gap: 3, alignItems: "center" }}>
-            {["Home", "About", "Contact"].map((item) => (
+            {["Home", "About", "Contact", "Blocks"].map((item) => (
               <Button
                 key={item}
                 onClick={() => navigateTo(item)}
@@ -309,7 +315,7 @@ export default function TopNavBar() {
                 </Typography>
               </Box>
 
-              {["Home", "About", "Contact"].map((item) => (
+              {["Home", "About", "Contact", "Blocks"].map((item) => (
                 <MenuItem
                   key={item}
                   onClick={() => navigateTo(item)}

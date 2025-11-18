@@ -16,7 +16,9 @@ import {
   Paper,
   Tabs,
   Tab,
+  Button,
 } from "@mui/material";
+import { Stamp } from "lucide-react";
 import TopNavBar from "@/app/components/TopNavBar";
 import Footer from "@/app/components/FooterSection";
 
@@ -44,13 +46,7 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
+    <div role="tabpanel" hidden={value !== index} id={`simple-tabpanel-${index}`} aria-labelledby={`simple-tab-${index}`} {...other}>
       {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
     </div>
   );
@@ -60,11 +56,50 @@ export default function HardhatExplorer() {
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [tabIndex, setTabIndex] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(20); // Start with 20
   const latestBlockRef = useRef<number>(0);
+  const totalBlocksRef = useRef<number>(0);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabIndex(newValue);
+  };
+
+  const loadMoreBlocks = async () => {
+    if (isLoadingMore || visibleCount >= totalBlocksRef.current + 1) return;
+    
+    setIsLoadingMore(true);
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    
+    try {
+      const latestBlockNumber = await provider.getBlockNumber();
+      const nextCount = Math.min(visibleCount + 20, latestBlockNumber + 1);
+      
+      const newBlocksToFetch = Array.from(
+        { length: nextCount - visibleCount },
+        (_, i) => provider.getBlock(latestBlockNumber - visibleCount - i)
+      );
+
+      const newBlocks = await Promise.all(newBlocksToFetch);
+      
+      const formatted = newBlocks
+        .filter((b): b is ethers.Block => !!b)
+        .map((b) => ({
+          number: b.number,
+          hash: b.hash ?? "",
+          miner: b.miner,
+          timestamp: new Date(b.timestamp * 1000).toLocaleString(),
+          txCount: b.transactions.length,
+        }));
+
+      setBlocks(prev => [...prev, ...formatted]);
+      setVisibleCount(nextCount);
+    } catch (err) {
+      console.error("Failed to load more blocks:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
   useEffect(() => {
@@ -74,9 +109,11 @@ export default function HardhatExplorer() {
       try {
         setIsLoading(true);
         const latestBlockNumber = await provider.getBlockNumber();
+        totalBlocksRef.current = latestBlockNumber;
 
+        const count = Math.min(visibleCount, latestBlockNumber + 1);
         const recentBlocks = await Promise.all(
-          Array.from({ length: Math.min(10, latestBlockNumber + 1) }, (_, i) =>
+          Array.from({ length: count }, (_, i) =>
             provider.getBlock(latestBlockNumber - i)
           )
         );
@@ -98,7 +135,7 @@ export default function HardhatExplorer() {
         for (const block of recentBlocks) {
           if (!block) continue;
           for (const txHash of block.transactions) {
-            const tx = await provider.getTransaction(txHash);
+            const tx = await provider.getTransaction(txHash as string);
             if (!tx) continue;
             fetchedTxs.push({
               txHash: tx.hash,
@@ -130,10 +167,12 @@ export default function HardhatExplorer() {
     return () => {
       provider.removeListener("block", handleNewBlock);
     };
-  }, []);
+  }, [visibleCount]);
 
   const shorten = (addr: string) =>
     addr.length > 12 ? `${addr.slice(0, 8)}...${addr.slice(-6)}` : addr;
+
+  const hasMore = visibleCount < totalBlocksRef.current + 1;
 
   return (
     <Box
@@ -160,7 +199,7 @@ export default function HardhatExplorer() {
             FairTrace Blockchain Explorer
           </Typography>
           <Typography variant="subtitle1" color="gray" sx={{ mt: 1 }}>
-            Real-time view of your local Hardhat network
+            Real-time view of your Blockchain network
           </Typography>
         </Box>
 
@@ -185,13 +224,8 @@ export default function HardhatExplorer() {
                 textTransform: "none",
                 fontSize: "1.1rem",
               },
-              "& .Mui-selected": {
-                color: "#ffffff !important",
-              },
-              "& .MuiTabs-indicator": {
-                height: 4,
-                backgroundColor: "#c8e6c9",
-              },
+              "& .Mui-selected": { color: "#ffffff !important" },
+              "& .MuiTabs-indicator": { height: 4, backgroundColor: "#c8e6c9" },
             }}
           >
             <Tab label="Latest Blocks" />
@@ -205,76 +239,129 @@ export default function HardhatExplorer() {
                 <CircularProgress size={64} thickness={5} sx={{ color: "#4caf50" }} />
               </Box>
             ) : (
-              <TableContainer sx={{ maxHeight: "70vh" }}>
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {["Block #", "Hash", "Miner", "Timestamp", "Tx Count"].map((header) => (
-                        <TableCell
-                          key={header}
-                          sx={{
-                            backgroundColor: "#2e7d32",
-                            color: "#ffffff",
-                            fontWeight: "bold",
-                            fontSize: "1rem",
-                            py: 2,
-                          }}
-                        >
-                          {header}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {blocks.map((b, idx) => (
-                      <TableRow
-                        key={b.hash}
-                        hover
-                        sx={{
-                          backgroundColor: idx % 2 === 0 ? "#f1f8e9" : "#e8f5e9",
-                          transition: "all 0.2s",
-                          "&:hover": {
-                            backgroundColor: "#c8e6c9",
-                            transform: "translateY(-1px)",
-                            boxShadow: "0 4px 8px rgba(46, 125, 50, 0.15)",
-                          },
-                        }}
-                      >
-                        <TableCell sx={{ fontWeight: 600, color: "#2e7d32" }}>
-                          {b.number}
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {shorten(b.hash)}
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {shorten(b.miner)}
-                        </TableCell>
-                        <TableCell>{b.timestamp}</TableCell>
-                        <TableCell>
-                          <Box
+              <>
+                <TableContainer sx={{ maxHeight: "70vh" }}>
+                  <Table stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        {["Block #", "Hash", "Miner", "Timestamp", "Tx Count"].map((header) => (
+                          <TableCell
+                            key={header}
                             sx={{
-                              backgroundColor: "#4caf50",
-                              color: "white",
-                              borderRadius: 2,
-                              px: 1.5,
-                              py: 0.5,
-                              fontSize: "0.8rem",
+                              backgroundColor: "#2e7d32",
+                              color: "#ffffff",
                               fontWeight: "bold",
-                              display: "inline-block",
+                              fontSize: "1rem",
+                              py: 2,
                             }}
                           >
-                            {b.txCount}
-                          </Box>
-                        </TableCell>
+                            {header}
+                          </TableCell>
+                        ))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {blocks.map((b, idx) => (
+                        <TableRow
+                          key={b.hash}
+                          hover
+                          sx={{
+                            backgroundColor: idx % 2 === 0 ? "#f1f8e9" : "#e8f5e9",
+                            transition: "all 0.2s",
+                            "&:hover": {
+                              backgroundColor: "#c8e6c9",
+                              transform: "translateY(-1px)",
+                              boxShadow: "0 4px 8px rgba(46, 125, 50, 0.15)",
+                            },
+                          }}
+                        >
+                          <TableCell sx={{ fontWeight: 600, color: "#2e7d32" }}>{b.number}</TableCell>
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{shorten(b.hash)}</TableCell>
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{shorten(b.miner)}</TableCell>
+                          <TableCell>{b.timestamp}</TableCell>
+                          <TableCell>
+                            <Box
+                              sx={{
+                                backgroundColor: "#4caf50",
+                                color: "white",
+                                borderRadius: 2,
+                                px: 1.5,
+                                py: 0.5,
+                                fontSize: "0.8rem",
+                                fontWeight: "bold",
+                                display: "inline-block",
+                              }}
+                            >
+                              {b.txCount}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* LOAD MORE BUTTON — Certificate Style */}
+                {hasMore && (
+                  <Box sx={{ p: 4, textAlign: "center" }}>
+                    <Button
+                      onClick={loadMoreBlocks}
+                      disabled={isLoadingMore}
+                      sx={{
+                        position: "relative",
+                        background: "#fff",
+                        color: "#1a3c34",
+                        border: "4px double #1a3c34",
+                        borderRadius: "50%",
+                        width: 100,
+                        height: 100,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 800,
+                        fontSize: "0.7rem",
+                        textTransform: "none",
+                        boxShadow: "0 8px 20px rgba(26,60,52,0.25)",
+                        transition: "all 0.3s",
+                        "&:hover": {
+                          background: "#fff",
+                          transform: "translateY(-4px)",
+                          boxShadow: "0 12px 28px rgba(26,60,52,0.35)",
+                        },
+                        "&:disabled": {
+                          opacity: 0.7,
+                          cursor: "not-allowed",
+                        },
+                      }}
+                    >
+                      {isLoadingMore ? (
+                        <CircularProgress size={28} thickness={5} sx={{ color: "#1a3c34" }} />
+                      ) : (
+                        <>
+                          <Stamp size={32} strokeWidth={3} />
+                          LOAD MORE
+                        </>
+                      )}
+                    </Button>
+                    <Typography
+                      sx={{
+                        mt: 2,
+                        fontWeight: 700,
+                        color: "#1a3c34",
+                        fontSize: "0.9rem",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      Showing {blocks.length} of {totalBlocksRef.current + 1} blocks
+                    </Typography>
+                  </Box>
+                )}
+              </>
             )}
           </TabPanel>
 
-          {/* Transactions Tab */}
+          {/* Transactions Tab — unchanged */}
           <TabPanel value={tabIndex} index={1}>
             {isLoading ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -282,9 +369,7 @@ export default function HardhatExplorer() {
               </Box>
             ) : transactions.length === 0 ? (
               <Box sx={{ textAlign: "center", py: 8 }}>
-                <Typography variant="h6" color="gray">
-                  No transactions found
-                </Typography>
+                <Typography variant="h6" color="gray">No transactions found</Typography>
               </Box>
             ) : (
               <TableContainer sx={{ maxHeight: "70vh" }}>
@@ -322,18 +407,10 @@ export default function HardhatExplorer() {
                           },
                         }}
                       >
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {shorten(tx.txHash)}
-                        </TableCell>
-                        <TableCell sx={{ color: "#2e7d32", fontWeight: 600 }}>
-                          {tx.blockNumber}
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {shorten(tx.from)}
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {shorten(tx.to)}
-                        </TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{shorten(tx.txHash)}</TableCell>
+                        <TableCell sx={{ color: "#2e7d32", fontWeight: 600 }}>{tx.blockNumber}</TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{shorten(tx.from)}</TableCell>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{shorten(tx.to)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

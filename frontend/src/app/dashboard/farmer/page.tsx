@@ -36,6 +36,7 @@ import TopNavBar from "../../components/TopNavBar";
 import Footer from "../../components/FooterSection";
 import { jwtDecode } from "jwt-decode";
 
+
 interface JwtPayload {
   first_name?: string;
   email: string;
