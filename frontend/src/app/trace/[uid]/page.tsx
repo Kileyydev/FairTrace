@@ -17,8 +17,14 @@ import {
   Tab,
   TextField,
   Alert,
+  Chip,
 } from "@mui/material";
-import { Download } from "@mui/icons-material";
+import {
+  Download as DownloadIcon,
+  LocalShipping as TruckIcon,
+  CheckCircle,
+  Error as AlertCircleIcon,
+} from "@mui/icons-material";
 import TopNavBar from "../../components/TopNavBar";
 import Footer from "../../components/FooterSection";
 import html2canvas from "html2canvas";
@@ -34,6 +40,16 @@ interface Product {
   proof?: string;
   public_signals?: any;
   farmer?: { id: string; name: string; email: string };
+}
+
+interface TransportEvent {
+  transportId: string;
+  fromLocation: string;
+  toLocation: string;
+  transporter: string;
+  temperatureOk: boolean;
+  timestamp: string;
+  txHash: string;
 }
 
 interface Consumer {
@@ -97,7 +113,6 @@ const theme = createTheme({
 const truncate = (str: string = "", start = 10, end = 6) =>
   str.length > start + end ? `${str.slice(0, start)}...${str.slice(-end)}` : str;
 
-// Fixed: params is now a Promise
 type PageProps = {
   params: Promise<{ uid: string }>;
 };
@@ -105,6 +120,7 @@ type PageProps = {
 export default function TracePage({ params }: PageProps) {
   const [uid, setUid] = useState<string | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
+  const [transports, setTransports] = useState<TransportEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
@@ -126,7 +142,6 @@ export default function TracePage({ params }: PageProps) {
     return status && !invalid.includes(status.toLowerCase());
   };
 
-  // Await params
   useEffect(() => {
     (async () => {
       try {
@@ -139,33 +154,43 @@ export default function TracePage({ params }: PageProps) {
     })();
   }, [params]);
 
-  // Load product and consumer session
   useEffect(() => {
     if (!uid) return;
 
-    async function fetchProduct() {
+    async function fetchData() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL;
         if (!apiUrl) throw new Error("API URL not configured");
 
-        const res = await fetch(`${apiUrl}/trace/${uid}/`);
-        if (!res.ok) throw new Error("Failed to load product");
+        const [productRes, transportRes] = await Promise.all([
+          fetch(`${apiUrl}/trace/${uid}/`),
+          fetch(`${apiUrl}/trace/${uid}/transports/`).catch(() => null),
+        ]);
 
-        setProduct(await res.json());
+        if (!productRes.ok) throw new Error("Failed to load product");
+        const productData = await productRes.json();
+        setProduct(productData);
+
+        if (transportRes && transportRes.ok) {
+          const transportData = await transportRes.json();
+          setTransports(transportData);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load");
+        setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
         setLoading(false);
       }
     }
 
-    fetchProduct();
+    fetchData();
 
-    const saved = localStorage.getItem(`consumer_session`);
+    const saved = localStorage.getItem("consumer_session");
     if (saved) {
-      const parsed = JSON.parse(saved);
-      setConsumer(parsed);
-      setIsAuthenticated(true);
+      try {
+        const parsed = JSON.parse(saved);
+        setConsumer(parsed);
+        setIsAuthenticated(true);
+      } catch {}
     }
   }, [uid]);
 
@@ -178,23 +203,17 @@ export default function TracePage({ params }: PageProps) {
       const res = await fetch(`${apiUrl}/consumer/login/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: selectedPhone.trim(),
-          pin: pin.trim(),
-        }),
+        body: JSON.stringify({ phone: selectedPhone.trim(), pin: pin.trim() }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        setTipError(data.detail || "Invalid phone or PIN");
-        return;
-      }
+      if (!res.ok) throw new Error(data.detail || "Login failed");
 
       setConsumer(data);
       setIsAuthenticated(true);
-      localStorage.setItem(`consumer_session`, JSON.stringify(data));
+      localStorage.setItem("consumer_session", JSON.stringify(data));
     } catch {
-      setTipError("Login failed. Check connection.");
+      setTipError("Invalid phone or PIN");
     }
   };
 
@@ -203,56 +222,38 @@ export default function TracePage({ params }: PageProps) {
     setTipSuccess(null);
     setTipLoading(true);
 
-    if (!consumer) {
-      setTipError("Please login first");
+    if (!consumer || !uid) {
+      setTipError("Login required");
       setTipLoading(false);
       return;
     }
 
     const amount = parseFloat(tipAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setTipError("Enter a valid amount");
-      setTipLoading(false);
-      return;
-    }
-
-    if (amount > consumer.balance) {
-      setTipError("Insufficient balance");
+    if (isNaN(amount) || amount <= 0 || amount > consumer.balance) {
+      setTipError("Invalid amount");
       setTipLoading(false);
       return;
     }
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) throw new Error("API URL missing");
-
       const res = await fetch(`${apiUrl}/consumer/tip/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: consumer.phone,
-          amount,
-          product_uid: uid,
-        }),
+        body: JSON.stringify({ phone: consumer.phone, amount, product_uid: uid }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        setTipError(data.detail || "Transaction failed");
-        setTipLoading(false);
-        return;
-      }
+      if (!res.ok) throw new Error(data.detail || "Tip failed");
 
-      const updatedConsumer = { ...consumer, balance: parseFloat(data.new_balance) };
-      setConsumer(updatedConsumer);
-      localStorage.setItem("consumer_session", JSON.stringify(updatedConsumer));
+      const updated = { ...consumer, balance: parseFloat(data.new_balance) };
+      setConsumer(updated);
+      localStorage.setItem("consumer_session", JSON.stringify(updated));
 
-      setTipSuccess(
-        `Tip sent! Tx: ${truncate(data.tx)} | New balance: ${data.new_balance} KSH`
-      );
+      setTipSuccess(`Tip sent! Tx: ${truncate(data.tx)}`);
       setTipAmount("");
-    } catch (err) {
-      setTipError("Network error. Try again.");
+    } catch {
+      setTipError("Transaction failed");
     } finally {
       setTipLoading(false);
     }
@@ -269,12 +270,12 @@ export default function TracePage({ params }: PageProps) {
 
   const handleDownloadPDF = async () => {
     if (!certificateRef.current || !product) return;
-    const canvas = await html2canvas(certificateRef.current, { scale: 2, backgroundColor: "#fff" });
+    const canvas = await html2canvas(certificateRef.current, { scale: 2 });
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
-    const imgWidth = 190;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+    const width = pdf.internal.pageSize.getWidth();
+    const height = (canvas.height * width) / canvas.width;
+    pdf.addImage(imgData, "PNG", 0, 0, width, height);
     pdf.save(`FairTrace_Certificate_${product.pid}.pdf`);
   };
 
@@ -291,13 +292,13 @@ export default function TracePage({ params }: PageProps) {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Box sx={{ minHeight: "100vh", bgcolor: "#f8faf9", display: "flex", flexDirection: "column" }}>
-          <Box sx={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1300, bgcolor: "#fff", borderBottom: "1px solid #1a3c34" }}>
-            <TopNavBar />
+          <TopNavBar />
+          <Box sx={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <Typography color="error" variant="h6" fontWeight={700}>
+              {error || "Product not found"}
+            </Typography>
           </Box>
-          <Box sx={{ flex: 1, pt: "70px", display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <Typography color="error" variant="h6" fontWeight={700}>{error || "Product not found"}</Typography>
-          </Box>
-          <Box sx={{ borderTop: "1px solid #1a3c34", bgcolor: "#fff" }}><Footer /></Box>
+          <Footer />
         </Box>
       </ThemeProvider>
     );
@@ -309,9 +310,7 @@ export default function TracePage({ params }: PageProps) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f8faf9" }}>
-        <Box sx={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1300, bgcolor: "#fff", borderBottom: "1px solid #1a3c34" }}>
-          <TopNavBar />
-        </Box>
+        <TopNavBar />
 
         <Box sx={{ flex: 1, pt: "70px", pb: 4 }}>
           <Container maxWidth="md" sx={{ py: 2 }}>
@@ -322,19 +321,20 @@ export default function TracePage({ params }: PageProps) {
 
             {/* CERTIFICATE TAB */}
             {tab === 0 && (
-              <Paper ref={certificateRef} elevation={0} sx={{ p: 3, maxWidth: 640, mx: "auto", fontSize: "0.95rem" }}>
+              <Paper ref={certificateRef} elevation={0} sx={{ p: 4, maxWidth: 720, mx: "auto", position: "relative" }}>
                 {valid ? (
                   <>
-                    <Typography variant="h3" sx={{ fontSize: "1.6rem", fontWeight: 700, color: "#1a3c34", textAlign: "center", mb: 1 }}>
+                    <Typography variant="h3" sx={{ fontSize: "1.8rem", fontWeight: 700, color: "#1a3c34", textAlign: "center", mb: 2 }}>
                       FAIRTRACE CERTIFICATE OF COMPLIANCE
                     </Typography>
+
                     <Box
                       sx={{
                         position: "absolute",
                         top: 40,
                         right: 20,
-                        width: 80,
-                        height: 80,
+                        width: 90,
+                        height: 90,
                         border: "6px double #1a3c34",
                         borderRadius: "50%",
                         display: "flex",
@@ -342,57 +342,81 @@ export default function TracePage({ params }: PageProps) {
                         alignItems: "center",
                         justifyContent: "center",
                         bgcolor: "#fff",
-                        fontSize: "0.55rem",
-                        fontWeight: 700,
+                        fontSize: "0.6rem",
+                        fontWeight: 800,
                         color: "#1a3c34",
+                        zIndex: 1,
                       }}
                     >
                       SEAL<br />VERIFIED
                     </Box>
 
-                    <Divider sx={{ my: 1, borderColor: "#1a3c34" }} />
+                    <Divider sx={{ my: 2, borderColor: "#1a3c34" }} />
 
-                    <Box sx={{ lineHeight: 1.6, fontFamily: '"Courier New", monospace' }}>
+                    <Box sx={{ lineHeight: 1.8, fontFamily: '"Courier New", monospace' }}>
                       <Typography><strong>Product ID:</strong> {product.pid}</Typography>
+                      <Typography><strong>Product:</strong> {product.title}</Typography>
                       <Typography>
-                        <strong>Status:</strong>
-                        <Box component="span" sx={{ color: "#2f855a", fontWeight: 700 }}>
-                          FairTrade Verified
-                        </Box>
+                        <strong>Status:</strong>{" "}
+                        <Box component="span" sx={{ color: "#2f855a", fontWeight: 700 }}>FairTrade Verified</Box>
                       </Typography>
-                      {product.tx_hash && <Typography><strong>Tx:</strong> {truncate(product.tx_hash)}</Typography>}
-                      {product.proof && <Typography><strong>Proof:</strong> {truncate(product.proof, 10, 4)}</Typography>}
-                      <Typography><strong>Issued:</strong> 2025-11-12</Typography>
-                      <Typography><strong>Verified:</strong> Consumer Side (ZKP)</Typography>
+                      {product.tx_hash && <Typography><strong>Farm Tx:</strong> {truncate(product.tx_hash)}</Typography>}
+                      <Typography><strong>Issued:</strong> {new Date().toLocaleDateString("en-KE")}</Typography>
                     </Box>
 
-                    <Divider sx={{ my: 1.5, borderColor: "#1a3c34" }} />
+                    {/* TRANSPORT JOURNEY */}
+                    {transports.length > 0 && (
+                      <>
+                        <Divider sx={{ my: 3, borderColor: "#1a3c34", borderStyle: "dashed" }} />
+                        <Typography variant="h6" sx={{ textAlign: "center", fontWeight: 700, color: "#1a3c34", mb: 2 }}>
+                          <TruckIcon sx={{ verticalAlign: "middle", mr: 1 }} fontSize="small" />
+                          TRANSPORT JOURNEY
+                        </Typography>
+                        <Box sx={{ bgcolor: "#f8fff8", p: 3, border: "2px dashed #1a3c34", borderRadius: 2 }}>
+                          {transports.map((t, i) => (
+                            <Box key={i} sx={{ mb: 2, fontSize: "0.95rem", fontFamily: '"Courier New", monospace' }}>
+                              <Typography><strong>Leg {i + 1}:</strong> {t.fromLocation} → {t.toLocation}</Typography>
+                              <Typography><strong>Transporter:</strong> {t.transporter}</Typography>
+                              <Typography>
+                                <strong>Conditions:</strong>{" "}
+                                {t.temperatureOk ? (
+                                  <Chip label="Temperature OK" size="small" color="success" icon={<CheckCircle fontSize="small" />} />
+                                ) : (
+                                  <Chip label="Warning" size="small" color="error" icon={<AlertCircleIcon fontSize="small" />} />
+                                )}
+                              </Typography>
+                              <Typography><strong>Timestamp:</strong> {new Date(t.timestamp).toLocaleString()}</Typography>
+                              <Typography><strong>Tx Hash:</strong> {truncate(t.txHash)}</Typography>
+                              {i < transports.length - 1 && <Divider sx={{ my: 1.5 }} />}
+                            </Box>
+                          ))}
+                        </Box>
+                      </>
+                    )}
 
-                    <Typography
-                      sx={{ fontStyle: "italic", color: "#333", textAlign: "center", fontSize: "0.95rem", mt: 1 }}
-                    >
-                      Meets FairTrade rules. Farmer data protected.
+                    <Divider sx={{ my: 3, borderColor: "#1a3c34" }} />
+
+                    <Typography sx={{ fontStyle: "italic", textAlign: "center", color: "#333", mb: 3 }}>
+                      This product was transported under monitored conditions using FairTrace Transport Smart Contract.
                     </Typography>
 
-                    <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
                       <Box>
-                        <Divider sx={{ width: 100, borderColor: "#1a3c34" }} />
+                        <Divider sx={{ width: 120, borderColor: "#1a3c34" }} />
                         <Typography variant="caption">FairTrace Authority</Typography>
                       </Box>
                       <Box>
-                        <Divider sx={{ width: 100, borderColor: "#1a3c34" }} />
-                        <Typography variant="caption">2025-11-12</Typography>
+                        <Divider sx={{ width: 120, borderColor: "#1a3c34" }} />
+                        <Typography variant="caption">{new Date().toLocaleDateString("en-KE")}</Typography>
                       </Box>
                     </Box>
                   </>
                 ) : (
-                  <Box sx={{ textAlign: "center", py: 3 }}>
-                    <Typography variant="h5" sx={{ color: "#c62828", fontWeight: 700, mb: 1 }}>
+                  <Box sx={{ textAlign: "center", py: 6 }}>
+                    <Typography variant="h5" color="error" fontWeight={700}>
                       Certificate Invalid
                     </Typography>
-                    <Typography sx={{ fontSize: "0.95rem" }}>
-                      Status: <strong>{product.status}</strong>
-                    </Typography>
+                    <Typography mt={1}>Status: <strong>{product.status}</strong></Typography>
                   </Box>
                 )}
               </Paper>
@@ -400,101 +424,55 @@ export default function TracePage({ params }: PageProps) {
 
             {/* SUPPORT FARMER TAB */}
             {tab === 1 && valid && product.farmer && (
-              <Paper elevation={0} sx={{ p: 3, maxWidth: 400, mx: "auto", mt: 1 }}>
-                <Typography variant="h6" sx={{ textAlign: "center", mb: 2, fontWeight: 600 }}>
+              <Paper elevation={0} sx={{ p: 4, maxWidth: 400, mx: "auto", mt: 3 }}>
+                <Typography variant="h6" textAlign="center" fontWeight={600} mb={3}>
                   Support {product.farmer.name}
                 </Typography>
 
                 {!isAuthenticated ? (
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                    <TextField
-                      label="Phone Number"
-                      value={selectedPhone}
-                      onChange={(e) => setSelectedPhone(e.target.value)}
-                      fullWidth
-                    />
-                    <TextField
-                      label="PIN"
-                      type="password"
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      fullWidth
-                    />
-                    <Button onClick={handleLogin} sx={{ bgcolor: "#2f855a", color: "#fff" }}>
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <TextField label="Phone Number" value={selectedPhone} onChange={(e) => setSelectedPhone(e.target.value)} fullWidth />
+                    <TextField label="PIN" type="password" value={pin} onChange={(e) => setPin(e.target.value)} fullWidth />
+                    <Button onClick={handleLogin} sx={{ bgcolor: "#2f855a", color: "#fff", "&:hover": { bgcolor: "#2f855a" } }}>
                       Login to Tip
                     </Button>
                   </Box>
                 ) : (
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                    <Typography sx={{ textAlign: "center", fontWeight: 600 }}>
-                      Logged in: {consumer?.name} ({consumer?.phone})
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <Typography textAlign="center" fontWeight={600}>
+                      {consumer?.name} ({consumer?.phone})
                     </Typography>
-                    <Typography sx={{ textAlign: "center", fontWeight: 600 }}>
+                    <Typography textAlign="center" fontWeight={600}>
                       Balance: {consumer?.balance} KSH
                     </Typography>
-                    <TextField
-                      label="Tip Amount (KSH)"
-                      value={tipAmount}
-                      onChange={(e) => setTipAmount(e.target.value)}
-                      type="number"
-                      fullWidth
-                    />
-                    <Button
-                      disabled={tipLoading}
-                      onClick={handleTip}
-                      sx={{ bgcolor: "#2f855a", color: "#fff" }}
-                    >
-                      {tipLoading ? "Processing..." : "Send Tip"}
+                    <TextField label="Tip Amount (KSH)" type="number" value={tipAmount} onChange={(e) => setTipAmount(e.target.value)} fullWidth />
+                    <Button disabled={tipLoading} onClick={handleTip} sx={{ bgcolor: "#2f855a", color: "#fff" }}>
+                      {tipLoading ? "Sending..." : "Send Tip"}
                     </Button>
-                    <Button onClick={handleLogout} sx={{ color: "#c62828", border: "1px solid #c62828" }}>
+                    <Button onClick={handleLogout} variant="outlined" color="error">
                       Logout
-                    </Button>
-                    <Button
-                      onClick={() => router.push(`/farmer/products/${product.farmer?.id}`)}
-                      sx={{ color: "#1a3c34", border: "1px solid #1a3c34" }}
-                    >
-                      Buy More Products
                     </Button>
                   </Box>
                 )}
 
-                {tipSuccess && <Alert severity="success" sx={{ mt: 1.5 }}>{tipSuccess}</Alert>}
-                {tipError && <Alert severity="error" sx={{ mt: 1.5 }}>{tipError}</Alert>}
+                {tipSuccess && <Alert severity="success" sx={{ mt: 2 }}>{tipSuccess}</Alert>}
+                {tipError && <Alert severity="error" sx={{ mt: 2 }}>{tipError}</Alert>}
               </Paper>
             )}
 
-            <Box sx={{ mt: 3, textAlign: "center" }}>
+            <Box sx={{ mt: 4, textAlign: "center" }}>
               <Button
-                startIcon={<Download />}
+                startIcon={<DownloadIcon />}
                 onClick={handleDownloadPDF}
-                sx={{ mr: 1, color: "#1a3c34", border: "1px solid #1a3c34" }}
+                sx={{ color: "#1a3c34", border: "2px solid #1a3c34", fontWeight: 600 }}
               >
-                Download PDF
+                Download Certificate PDF
               </Button>
-            </Box>
-
-            <Box sx={{ mt: 2, textAlign: "center" }}>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: 0,
-                  border: "1px solid #1a3c34",
-                  width: "fit-content",
-                  mx: "auto",
-                }}
-              >
-                <Button fullWidth disabled sx={{ color: "#1a3c34", bgcolor: "#f0f0f0" }}>
-                  Consumer
-                </Button>
-              </Box>
             </Box>
           </Container>
         </Box>
 
-        <Box sx={{ borderTop: "1px solid #1a3c34", bgcolor: "#fff" }}>
-          <Footer />
-        </Box>
+        <Footer />
       </Box>
     </ThemeProvider>
   );
