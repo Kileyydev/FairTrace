@@ -467,7 +467,7 @@ export default function SaccoAdmin() {
                       <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>
                         {farmer.first_name}
                       </TableCell>
-                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{farmer.email}</TableCell>
+                      <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>{product.farmer.email}</TableCell>
                       <TableCell sx={{ color: "#1a3c34", fontSize: "0.88rem" }}>
                         {farmer.phone_number}
                       </TableCell>

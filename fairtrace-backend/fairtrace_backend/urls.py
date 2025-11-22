@@ -35,7 +35,7 @@ urlpatterns = [
     path("api/auth/", include("rest_framework.urls")),
     path("api/", include("billing.urls")),# optional for browsable
     # path("api/token-auth/", include("rest_framework.authtoken.urls")), 
-
+    path("api/market/", include("market.urls")),  # market app URLs
 
      
 ]

@@ -24,6 +24,15 @@ async function main() {
   await fairTraceTransport.deployed();
   console.log("✅ FairTraceTransport deployed to:", fairTraceTransport.address);
 
+  // SaccoPurchases
+  const SaccoPurchases = await ethers.getContractFactory("SaccoPurchases");
+  const contract = await SaccoPurchases.deploy();
+  await contract.deployed();
+  console.log("SaccoPurchases deployed to:", contract.address);
+
+
+
+
   // --- Save deployment addresses ---
   const deployments = {
     network: hre.network.name,

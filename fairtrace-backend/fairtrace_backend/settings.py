@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'payments',
     'logistics',
     'billing',
+    'market',
 ]
 
 # MIDDLEWARE
