@@ -1,6 +1,6 @@
 --index-url https://download.pytorch.org/whl/cpu
 --extra-index-url https://pypi.org/simple
-
+uvicorn[standard]==0.30.6
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.15
 aiosignal==1.4.0
@@ -85,4 +85,5 @@ web3==7.13.0
 websockets==15.0.1
 wheel==0.45.1
 yarl==1.20.1
+
 
