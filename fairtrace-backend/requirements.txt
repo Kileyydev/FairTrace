@@ -53,6 +53,7 @@ packaging==25.0
 parsimonious==0.10.0
 pillow==11.3.0
 prompt_toolkit==3.0.52
+dj-database-url==2.2.0
 propcache==0.3.2
 psycopg2-binary==2.9.10
 py_lets_be_rational==1.0.1
