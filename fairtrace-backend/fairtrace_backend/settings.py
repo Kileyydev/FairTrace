@@ -81,6 +81,8 @@ WSGI_APPLICATION = 'fairtrace_backend.wsgi.application'
 # DATABASE
 import os
 import dj_database_url  # make sure this is in requirements.txt
+from decouple import config
+
 
 # SECURITY WARNING: keep the production database URL in Render's environment variables
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -163,6 +165,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://fair-trace.vercel.app",
 ]
 
 # WEB3 / BLOCKCHAIN SETTINGS
